@@ -9,7 +9,7 @@ defaults, reverse dependencies (`select` / `imply`), and `choice` exclusivity,
 validates the result, and emits:
 
 - a human-readable `.config`
-- a generated `config.rs` with typed `const` items (`bool`, `u32`, `&'static str`, `Tristate`)
+- a generated `config.rs` with typed `const` items (`bool`, `u8`/`u16`/`u32`/`u64` or signed widths, `&'static str`, `Tristate`)
 - `cargo:rustc-cfg=...` flags so `#[cfg]` / `cfg!` work for enabled boolean options
 
 ## Commands

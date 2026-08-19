@@ -15,7 +15,7 @@ fn main() {
     println!("bare-metal     = {CONFIG_BARE_METAL_HOOKS}  (depends on !NETWORK)");
 
     if CONFIG_LOGGING {
-        let _level: u32 = CONFIG_LOG_LEVEL;
+        let _level: u8 = CONFIG_LOG_LEVEL;
         println!("log level is in range 0..=5: {CONFIG_LOG_LEVEL}");
     }
 

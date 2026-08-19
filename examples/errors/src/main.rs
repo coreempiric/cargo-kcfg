@@ -39,7 +39,7 @@ mod tests {
         assert!(CONFIG_UART_CONSOLE);
         assert!(!CONFIG_RTT_CONSOLE);
         assert_eq!(CONFIG_BUF_SIZE, 16);
-        let _buf: u32 = CONFIG_BUF_SIZE;
+        let _buf: u8 = CONFIG_BUF_SIZE;
     }
 
     #[cfg(not(CONFIG_BUS))]

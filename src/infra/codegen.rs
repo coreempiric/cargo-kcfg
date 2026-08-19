@@ -1,4 +1,6 @@
-use crate::domain::{EvaluatedConfig, SymbolType, Tristate, Value, config_ident};
+use crate::domain::{
+    EvaluatedConfig, RangeBound, Symbol, SymbolType, Tristate, Value, config_ident,
+};
 
 /// Generated artefacts produced from an evaluated configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +40,7 @@ pub fn generate(evaluated: &EvaluatedConfig) -> Generated {
             continue;
         };
         let ident = config_ident(&symbol.name);
-        config_rs.push_str(&rust_const(&ident, kind, value));
+        config_rs.push_str(&rust_const(&ident, kind, value, symbol, evaluated));
         config_rs.push('\n');
         dotconfig.push_str(&dotconfig_line(&ident, kind, value));
         dotconfig.push('\n');
@@ -59,7 +61,13 @@ pub fn generate(evaluated: &EvaluatedConfig) -> Generated {
     }
 }
 
-fn rust_const(ident: &str, kind: SymbolType, value: &Value) -> String {
+fn rust_const(
+    ident: &str,
+    kind: SymbolType,
+    value: &Value,
+    symbol: &Symbol,
+    evaluated: &EvaluatedConfig,
+) -> String {
     match kind {
         SymbolType::Bool => {
             let v = matches!(value, Value::Bool(true)) || value.to_tristate() == Tristate::Yes;
@@ -75,17 +83,86 @@ fn rust_const(ident: &str, kind: SymbolType, value: &Value) -> String {
             format!("pub const {ident}: Tristate = Tristate::{variant};")
         }
         SymbolType::Int | SymbolType::Hex => {
-            let n = value.as_u32().unwrap_or(0);
-            if kind == SymbolType::Hex {
-                format!("pub const {ident}: u32 = {n:#x};")
-            } else {
-                format!("pub const {ident}: u32 = {n};")
-            }
+            integer_const(ident, kind == SymbolType::Hex, value, symbol, evaluated)
         }
         SymbolType::String => {
             let s = value.as_string();
             format!("pub const {ident}: &'static str = {s:?};")
         }
+    }
+}
+
+fn integer_const(
+    ident: &str,
+    hex: bool,
+    value: &Value,
+    symbol: &Symbol,
+    evaluated: &EvaluatedConfig,
+) -> String {
+    let n = match value_as_i128(value) {
+        Some(n) => n,
+        None => return format!("pub const {ident}: i64 = 0;"),
+    };
+    let (lo, hi) = integer_bounds(n, symbol, evaluated);
+    let ty = rust_int_type(lo, hi);
+    if hex && n >= 0 {
+        format!("pub const {ident}: {ty} = {n:#x};")
+    } else {
+        format!("pub const {ident}: {ty} = {n};")
+    }
+}
+
+fn value_as_i128(value: &Value) -> Option<i128> {
+    match value {
+        Value::Int(n) => Some(i128::from(*n)),
+        Value::Hex(n) => Some(i128::from(*n)),
+        _ => value.as_int().ok().map(i128::from),
+    }
+}
+
+fn integer_bounds(value: i128, symbol: &Symbol, evaluated: &EvaluatedConfig) -> (i128, i128) {
+    let mut lo = value;
+    let mut hi = value;
+    for range in &symbol.ranges {
+        if let Some(min) = bound_as_i128(&range.min, evaluated) {
+            lo = lo.min(min);
+            hi = hi.max(min);
+        }
+        if let Some(max) = bound_as_i128(&range.max, evaluated) {
+            lo = lo.min(max);
+            hi = hi.max(max);
+        }
+    }
+    (lo, hi)
+}
+
+fn bound_as_i128(bound: &RangeBound, evaluated: &EvaluatedConfig) -> Option<i128> {
+    match bound {
+        RangeBound::Number(n) => Some(i128::from(*n)),
+        RangeBound::Symbol(name) => evaluated.get(name).and_then(value_as_i128),
+    }
+}
+
+/// Smallest explicit integer type that can hold every value in `lo..=hi`.
+fn rust_int_type(lo: i128, hi: i128) -> &'static str {
+    if lo >= 0 {
+        if hi <= i128::from(u8::MAX) {
+            "u8"
+        } else if hi <= i128::from(u16::MAX) {
+            "u16"
+        } else if hi <= i128::from(u32::MAX) {
+            "u32"
+        } else {
+            "u64"
+        }
+    } else if lo >= i128::from(i8::MIN) && hi <= i128::from(i8::MAX) {
+        "i8"
+    } else if lo >= i128::from(i16::MIN) && hi <= i128::from(i16::MAX) {
+        "i16"
+    } else if lo >= i128::from(i32::MIN) && hi <= i128::from(i32::MAX) {
+        "i32"
+    } else {
+        "i64"
     }
 }
 
@@ -155,7 +232,7 @@ mod tests {
         assert!(
             generated
                 .config_rs
-                .contains("pub const CONFIG_BUFFER_SIZE: u32 = 128;")
+                .contains("pub const CONFIG_BUFFER_SIZE: u8 = 128;")
         );
         assert!(
             generated
@@ -164,5 +241,15 @@ mod tests {
         );
         assert!(generated.dotconfig.contains("CONFIG_FOO=y"));
         assert!(generated.rustc_cfgs.contains(&"CONFIG_FOO".to_string()));
+    }
+
+    #[test]
+    fn integer_width_follows_value_and_range() {
+        assert_eq!(super::rust_int_type(0, 16), "u8");
+        assert_eq!(super::rust_int_type(0, 256), "u16");
+        assert_eq!(super::rust_int_type(0, 70_000), "u32");
+        assert_eq!(super::rust_int_type(0, i128::from(u32::MAX) + 1), "u64");
+        assert_eq!(super::rust_int_type(-1, 10), "i8");
+        assert_eq!(super::rust_int_type(-200, 10), "i16");
     }
 }

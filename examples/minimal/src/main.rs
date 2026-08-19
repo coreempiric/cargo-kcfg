@@ -25,7 +25,7 @@ mod tests {
     #[test]
     fn generated_constants_have_expected_types() {
         let _enabled: bool = CONFIG_FOO;
-        let _size: u32 = CONFIG_BUFFER_SIZE;
+        let _size: u16 = CONFIG_BUFFER_SIZE;
         let _name: &'static str = CONFIG_BOARD_NAME;
         let _buf = [0u8; CONFIG_BUFFER_SIZE as usize];
         assert!(CONFIG_FOO);

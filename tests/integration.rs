@@ -51,7 +51,7 @@ fn sourced_tree_produces_dotconfig_and_typed_constants() {
     let rs = &result.generated.config_rs;
     assert!(rs.contains("pub const CONFIG_FOO: bool = true;"), "{rs}");
     assert!(
-        rs.contains("pub const CONFIG_BUFFER_SIZE: u32 = 256;"),
+        rs.contains("pub const CONFIG_BUFFER_SIZE: u16 = 256;"),
         "{rs}"
     );
     assert!(
@@ -59,7 +59,7 @@ fn sourced_tree_produces_dotconfig_and_typed_constants() {
         "{rs}"
     );
     assert!(
-        rs.contains("pub const CONFIG_DMA_ADDR: u32 = 0x2000;"),
+        rs.contains("pub const CONFIG_DMA_ADDR: u16 = 0x2000;"),
         "{rs}"
     );
     assert!(

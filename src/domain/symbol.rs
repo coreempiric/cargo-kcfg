@@ -24,6 +24,7 @@ impl SymbolType {
         }
     }
 
+    /// Rust type used when the integer width is not yet known.
     pub fn rust_type(self) -> &'static str {
         match self {
             Self::Bool => "bool",

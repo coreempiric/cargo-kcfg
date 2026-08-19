@@ -9,7 +9,8 @@ pub enum Value {
     Bool(bool),
     Tristate(Tristate),
     /// Signed 64-bit so evaluation never widens or truncates implicitly.
-    /// Generated Rust constants use `u32` when the value is in range.
+    /// Codegen picks `u8`/`u16`/`u32`/`u64` or a signed width from the value
+    /// and any `range`.
     Int(i64),
     Hex(u64),
     String(String),
