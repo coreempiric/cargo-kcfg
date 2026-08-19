@@ -1,3 +1,8 @@
+//! Evaluation and validation of a symbol table against user assignments.
+//!
+//! Pipeline step: [`Evaluator::evaluate`]. [`EvaluationContext`] walks
+//! expressions; [`EvaluatedConfig`] is the successful result.
+
 use super::choice::ChoiceGroup;
 use super::defconfig::AssignmentSet;
 use super::dependency::{DependencyGraph, ReverseKind};
@@ -41,7 +46,7 @@ pub struct EvaluationContext<'a> {
     graph: DependencyGraph,
 }
 
-/// Evaluate assignments against the symbol table.
+/// Evaluates user assignments against a symbol table.
 ///
 /// Direct values (user assignment, then the first visible default, then the
 /// type zero) are resolved first. `select` then raises bool/tristate targets
@@ -52,32 +57,41 @@ pub struct EvaluationContext<'a> {
 /// (including `select` of a target whose `depends on` is unmet) are returned
 /// as a [`ValidationReport`]. Non-fatal warnings, if any, travel with the
 /// successful [`EvaluatedConfig`].
-pub fn evaluate(
-    table: SymbolTable,
-    assignments: &AssignmentSet,
+pub struct Evaluator {
     limits: Limits,
-) -> Result<EvaluatedConfig, ValidationReport> {
-    let mut ctx = EvaluationContext {
-        table: &table,
-        assignments,
-        limits,
-        values: HashMap::new(),
-        visiting: HashSet::new(),
-        report: ValidationReport::new(),
-        graph: DependencyGraph::from_table(&table),
-    };
+}
 
-    if let Some(cycle) = ctx.graph.find_cycle() {
-        ctx.report.push(ValidationIssue {
-            kind: IssueKind::CyclicDependency,
-            symbol: cycle.first().cloned(),
-            message: format_cycle(&cycle),
-        });
+impl Evaluator {
+    pub fn new(limits: Limits) -> Self {
+        Self { limits }
     }
 
-    for assignment in assignments.iter() {
-        if !table.contains(&assignment.name) {
+    pub fn evaluate(
+        &self,
+        table: SymbolTable,
+        assignments: &AssignmentSet,
+    ) -> Result<EvaluatedConfig, ValidationReport> {
+        let mut ctx = EvaluationContext {
+            table: &table,
+            assignments,
+            limits: self.limits,
+            values: HashMap::new(),
+            visiting: HashSet::new(),
+            report: ValidationReport::new(),
+            graph: DependencyGraph::from_table(&table),
+        };
+
+        if let Some(cycle) = ctx.graph.find_cycle() {
             ctx.report.push(ValidationIssue {
+                kind: IssueKind::CyclicDependency,
+                symbol: cycle.first().cloned(),
+                message: format_cycle(&cycle),
+            });
+        }
+
+        for assignment in assignments.iter() {
+            if !table.contains(&assignment.name) {
+                ctx.report.push(ValidationIssue {
                 kind: IssueKind::UnknownSymbol,
                 symbol: Some(assignment.name.clone()),
                 message: format!(
@@ -87,71 +101,81 @@ pub fn evaluate(
                     assignment.name
                 ),
             });
-        }
-    }
-
-    for symbol in table.iter() {
-        if let Err(err) = ctx.resolve(&symbol.name) {
-            let (kind, symbol_name) = match &err {
-                DomainError::CyclicDependency { name } => {
-                    (IssueKind::CyclicDependency, Some(name.clone()))
-                }
-                _ => (IssueKind::ParseError, Some(symbol.name.clone())),
-            };
-            if kind == IssueKind::CyclicDependency
-                && ctx.report.has_kind(IssueKind::CyclicDependency)
-            {
-                continue;
             }
+        }
+
+        for symbol in table.iter() {
+            if let Err(err) = ctx.resolve(&symbol.name) {
+                let (kind, symbol_name) = match &err {
+                    DomainError::CyclicDependency { name } => {
+                        (IssueKind::CyclicDependency, Some(name.clone()))
+                    }
+                    _ => (IssueKind::ParseError, Some(symbol.name.clone())),
+                };
+                if kind == IssueKind::CyclicDependency
+                    && ctx.report.has_kind(IssueKind::CyclicDependency)
+                {
+                    continue;
+                }
+                ctx.report.push(ValidationIssue {
+                    kind,
+                    symbol: symbol_name,
+                    message: err.to_string(),
+                });
+            }
+        }
+
+        ctx.validate_reverse_dep_targets();
+
+        if let Err(err) = ctx.apply_reverse_dependencies() {
+            let kind = match &err {
+                DomainError::ResolutionDidNotConverge { .. } => IssueKind::LimitExceeded,
+                DomainError::CyclicDependency { .. } => IssueKind::CyclicDependency,
+                _ => IssueKind::ParseError,
+            };
             ctx.report.push(ValidationIssue {
                 kind,
-                symbol: symbol_name,
+                symbol: None,
                 message: err.to_string(),
             });
         }
+
+        if let Err(err) = ctx.enforce_choice_constraints() {
+            ctx.report.push(ValidationIssue {
+                kind: IssueKind::ParseError,
+                symbol: None,
+                message: err.to_string(),
+            });
+        }
+
+        if let Err(err) = ctx.classify_unmet_dependencies() {
+            ctx.report.push(ValidationIssue {
+                kind: IssueKind::ParseError,
+                symbol: None,
+                message: err.to_string(),
+            });
+        }
+
+        let EvaluationContext { values, report, .. } = ctx;
+        if report.has_errors() {
+            return Err(report);
+        }
+
+        Ok(EvaluatedConfig {
+            table,
+            values,
+            warnings: report.warnings,
+        })
     }
+}
 
-    ctx.validate_reverse_dep_targets();
-
-    if let Err(err) = ctx.apply_reverse_dependencies() {
-        let kind = match &err {
-            DomainError::ResolutionDidNotConverge { .. } => IssueKind::LimitExceeded,
-            DomainError::CyclicDependency { .. } => IssueKind::CyclicDependency,
-            _ => IssueKind::ParseError,
-        };
-        ctx.report.push(ValidationIssue {
-            kind,
-            symbol: None,
-            message: err.to_string(),
-        });
-    }
-
-    if let Err(err) = ctx.enforce_choice_constraints() {
-        ctx.report.push(ValidationIssue {
-            kind: IssueKind::ParseError,
-            symbol: None,
-            message: err.to_string(),
-        });
-    }
-
-    if let Err(err) = ctx.classify_unmet_dependencies() {
-        ctx.report.push(ValidationIssue {
-            kind: IssueKind::ParseError,
-            symbol: None,
-            message: err.to_string(),
-        });
-    }
-
-    let EvaluationContext { values, report, .. } = ctx;
-    if report.has_errors() {
-        return Err(report);
-    }
-
-    Ok(EvaluatedConfig {
-        table,
-        values,
-        warnings: report.warnings,
-    })
+/// Evaluate assignments against the symbol table.
+pub fn evaluate(
+    table: SymbolTable,
+    assignments: &AssignmentSet,
+    limits: Limits,
+) -> Result<EvaluatedConfig, ValidationReport> {
+    Evaluator::new(limits).evaluate(table, assignments)
 }
 
 impl EvaluationContext<'_> {

@@ -1,6 +1,7 @@
 //! Core Kconfig domain: symbols, expressions, evaluation, and validation.
 //!
 //! This layer has no Cargo, filesystem, or parser-crate dependencies.
+//! The pipeline enters here at [`Evaluator`].
 
 mod choice;
 mod defconfig;
@@ -19,7 +20,7 @@ pub use choice::ChoiceGroup;
 pub use defconfig::{Assignment, AssignmentSet};
 pub use dependency::{DependencyGraph, ReverseEdge, ReverseKind};
 pub use error::DomainError;
-pub use evaluation::{EvaluatedConfig, EvaluationContext, evaluate};
+pub use evaluation::{EvaluatedConfig, EvaluationContext, Evaluator, evaluate};
 pub use expression::{CompareOp, Expression};
 pub use limits::Limits;
 pub use symbol::{

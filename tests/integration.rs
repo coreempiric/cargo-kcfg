@@ -1,6 +1,6 @@
 use cargo_kconfig::Error;
 use cargo_kconfig::domain::{IssueKind, Value};
-use cargo_kconfig::infra::pipeline::{GenerateRequest, run};
+use cargo_kconfig::{GenerateRequest, Pipeline};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -26,7 +26,9 @@ fn expect_validation(
 #[test]
 fn sourced_tree_produces_dotconfig_and_typed_constants() {
     let dir = fixture("happy_sourced");
-    let result = run(&request(&dir, "qemu_defconfig")).expect("pipeline");
+    let result = Pipeline::new()
+        .run(&request(&dir, "qemu_defconfig"))
+        .expect("pipeline");
 
     assert_eq!(result.evaluated.get("FOO"), Some(&Value::Bool(true)));
     assert_eq!(result.evaluated.get("BUFFER_SIZE"), Some(&Value::Int(256)));
@@ -79,7 +81,9 @@ fn sourced_tree_produces_dotconfig_and_typed_constants() {
 #[test]
 fn source_follows_kconfig_graph_not_directory_crawl() {
     let dir = fixture("happy_sourced");
-    let result = run(&request(&dir, "qemu_defconfig")).expect("pipeline");
+    let result = Pipeline::new()
+        .run(&request(&dir, "qemu_defconfig"))
+        .expect("pipeline");
 
     assert!(result.evaluated.table.contains("BOARD_EXTRA"));
     assert!(
@@ -111,7 +115,9 @@ fn source_follows_kconfig_graph_not_directory_crawl() {
 #[test]
 fn generated_constants_are_usable_from_rust() {
     let dir = fixture("happy_sourced");
-    let result = run(&request(&dir, "qemu_defconfig")).expect("pipeline");
+    let result = Pipeline::new()
+        .run(&request(&dir, "qemu_defconfig"))
+        .expect("pipeline");
     let body = r#"
         if CONFIG_FOO {
             let buf = [0u8; CONFIG_BUFFER_SIZE as usize];
@@ -129,7 +135,7 @@ fn generated_constants_are_usable_from_rust() {
 #[test]
 fn rejects_unknown_symbols() {
     let dir = fixture("unknown_symbol");
-    let report = expect_validation(run(&request(&dir, "bad_defconfig")));
+    let report = expect_validation(Pipeline::new().run(&request(&dir, "bad_defconfig")));
     assert!(report.has_kind(IssueKind::UnknownSymbol), "{report}");
     assert!(report.to_string().contains("DOES_NOT_EXIST"), "{report}");
 }
@@ -137,28 +143,30 @@ fn rejects_unknown_symbols() {
 #[test]
 fn rejects_type_incorrect_values() {
     let dir = fixture("type_mismatch");
-    let report = expect_validation(run(&request(&dir, "bad_defconfig")));
+    let report = expect_validation(Pipeline::new().run(&request(&dir, "bad_defconfig")));
     assert!(report.has_kind(IssueKind::TypeMismatch), "{report}");
 }
 
 #[test]
 fn rejects_out_of_range_integers() {
     let dir = fixture("out_of_range");
-    let report = expect_validation(run(&request(&dir, "bad_defconfig")));
+    let report = expect_validation(Pipeline::new().run(&request(&dir, "bad_defconfig")));
     assert!(report.has_kind(IssueKind::OutOfRange), "{report}");
 }
 
 #[test]
 fn rejects_unmet_dependencies() {
     let dir = fixture("depends_unmet");
-    let report = expect_validation(run(&request(&dir, "bad_defconfig")));
+    let report = expect_validation(Pipeline::new().run(&request(&dir, "bad_defconfig")));
     assert!(report.has_kind(IssueKind::UnmetDependency), "{report}");
 }
 
 #[test]
 fn select_raises_helper_without_a_user_assignment() {
     let dir = fixture("select_imply");
-    let result = run(&request(&dir, "uart_defconfig")).expect("pipeline");
+    let result = Pipeline::new()
+        .run(&request(&dir, "uart_defconfig"))
+        .expect("pipeline");
     assert_eq!(result.evaluated.get("UART"), Some(&Value::Bool(true)));
     assert_eq!(result.evaluated.get("HAS_UART"), Some(&Value::Bool(true)));
     assert!(result.evaluated.warnings.is_empty());
@@ -174,7 +182,7 @@ fn select_raises_helper_without_a_user_assignment() {
 #[test]
 fn select_unmet_target_deps_is_rejected() {
     let dir = fixture("select_imply");
-    let report = expect_validation(run(&request(&dir, "unmet_defconfig")));
+    let report = expect_validation(Pipeline::new().run(&request(&dir, "unmet_defconfig")));
     assert!(report.has_kind(IssueKind::UnmetDependency), "{report}");
     assert!(report.to_string().contains("CONFIG_HAS_DMA"), "{report}");
     assert!(
@@ -186,12 +194,16 @@ fn select_unmet_target_deps_is_rejected() {
 #[test]
 fn imply_raises_until_the_user_sets_n() {
     let dir = fixture("select_imply");
-    let on = run(&request(&dir, "imply_defconfig")).expect("pipeline");
+    let on = Pipeline::new()
+        .run(&request(&dir, "imply_defconfig"))
+        .expect("pipeline");
     assert_eq!(on.evaluated.get("DEBUG"), Some(&Value::Bool(true)));
     assert_eq!(on.evaluated.get("LOG"), Some(&Value::Bool(true)));
     assert!(on.evaluated.warnings.is_empty());
 
-    let off = run(&request(&dir, "imply_off_defconfig")).expect("pipeline");
+    let off = Pipeline::new()
+        .run(&request(&dir, "imply_off_defconfig"))
+        .expect("pipeline");
     assert_eq!(off.evaluated.get("DEBUG"), Some(&Value::Bool(true)));
     assert_eq!(off.evaluated.get("LOG"), Some(&Value::Bool(false)));
 }
@@ -199,7 +211,7 @@ fn imply_raises_until_the_user_sets_n() {
 #[test]
 fn rejects_select_of_unknown_symbol() {
     let dir = fixture("select_unknown");
-    let report = expect_validation(run(&request(&dir, "bad_defconfig")));
+    let report = expect_validation(Pipeline::new().run(&request(&dir, "bad_defconfig")));
     assert!(report.has_kind(IssueKind::UnknownSymbol), "{report}");
     assert!(report.to_string().contains("MISSING"), "{report}");
 }
@@ -207,7 +219,7 @@ fn rejects_select_of_unknown_symbol() {
 #[test]
 fn rejects_select_of_non_bool_symbol() {
     let dir = fixture("select_nonbool");
-    let report = expect_validation(run(&request(&dir, "empty_defconfig")));
+    let report = expect_validation(Pipeline::new().run(&request(&dir, "empty_defconfig")));
     assert!(report.has_kind(IssueKind::TypeMismatch), "{report}");
     assert!(report.to_string().contains("SIZE"), "{report}");
 }
@@ -215,7 +227,9 @@ fn rejects_select_of_non_bool_symbol() {
 #[test]
 fn choice_selects_exactly_one_member() {
     let dir = fixture("choice_ok");
-    let uart = run(&request(&dir, "uart_defconfig")).expect("pipeline");
+    let uart = Pipeline::new()
+        .run(&request(&dir, "uart_defconfig"))
+        .expect("pipeline");
     assert_eq!(uart.evaluated.get("UART_CONSOLE"), Some(&Value::Bool(true)));
     assert_eq!(uart.evaluated.get("RTT_CONSOLE"), Some(&Value::Bool(false)));
     assert_eq!(uart.evaluated.get("USB_CONSOLE"), Some(&Value::Bool(false)));
@@ -225,7 +239,9 @@ fn choice_selects_exactly_one_member() {
     );
     assert!(uart.generated.dotconfig.contains("CONFIG_UART_CONSOLE=y"));
 
-    let rtt = run(&request(&dir, "rtt_defconfig")).expect("pipeline");
+    let rtt = Pipeline::new()
+        .run(&request(&dir, "rtt_defconfig"))
+        .expect("pipeline");
     assert_eq!(rtt.evaluated.get("UART_CONSOLE"), Some(&Value::Bool(false)));
     assert_eq!(rtt.evaluated.get("RTT_CONSOLE"), Some(&Value::Bool(true)));
     assert_eq!(rtt.evaluated.get("CONSOLE_BAUD"), Some(&Value::Int(0)));
@@ -234,7 +250,7 @@ fn choice_selects_exactly_one_member() {
 #[test]
 fn rejects_choice_with_two_members_enabled() {
     let dir = fixture("choice_conflict");
-    let report = expect_validation(run(&request(&dir, "bad_defconfig")));
+    let report = expect_validation(Pipeline::new().run(&request(&dir, "bad_defconfig")));
     assert!(report.has_kind(IssueKind::ChoiceConflict), "{report}");
     assert!(
         report.to_string().contains("more than one member enabled"),
@@ -245,14 +261,16 @@ fn rejects_choice_with_two_members_enabled() {
 #[test]
 fn rejects_cyclic_direct_dependencies() {
     let dir = fixture("cyclic_depends");
-    let report = expect_validation(run(&request(&dir, "empty_defconfig")));
+    let report = expect_validation(Pipeline::new().run(&request(&dir, "empty_defconfig")));
     assert!(report.has_kind(IssueKind::CyclicDependency), "{report}");
 }
 
 #[test]
 fn applies_defaults_when_defconfig_is_empty() {
     let dir = fixture("defaults_only");
-    let result = run(&request(&dir, "empty_defconfig")).expect("pipeline");
+    let result = Pipeline::new()
+        .run(&request(&dir, "empty_defconfig"))
+        .expect("pipeline");
     assert_eq!(result.evaluated.get("FOO"), Some(&Value::Bool(true)));
     assert_eq!(result.evaluated.get("SIZE"), Some(&Value::Int(32)));
     assert!(result.generated.dotconfig.contains("CONFIG_FOO=y"));

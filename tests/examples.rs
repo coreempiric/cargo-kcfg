@@ -1,6 +1,6 @@
 use cargo_kconfig::Error;
 use cargo_kconfig::domain::{IssueKind, Tristate, Value};
-use cargo_kconfig::infra::pipeline::{GenerateRequest, run};
+use cargo_kconfig::{GenerateRequest, Pipeline};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -12,12 +12,13 @@ fn example_dir(name: &str) -> PathBuf {
 
 fn evaluate(example: &str, defconfig: &str) -> cargo_kconfig::GenerateResult {
     let dir = example_dir(example);
-    run(&GenerateRequest::new(
-        dir.clone(),
-        dir.join("Kconfig"),
-        dir.join(defconfig),
-    ))
-    .unwrap_or_else(|err| panic!("{example}/{defconfig}: {err}"))
+    Pipeline::new()
+        .run(&GenerateRequest::new(
+            dir.clone(),
+            dir.join("Kconfig"),
+            dir.join(defconfig),
+        ))
+        .unwrap_or_else(|err| panic!("{example}/{defconfig}: {err}"))
 }
 
 fn expect_error(
@@ -27,7 +28,7 @@ fn expect_error(
     needles: &[&str],
 ) -> cargo_kconfig::ValidationReport {
     let dir = example_dir(example);
-    let err = match run(&GenerateRequest::new(
+    let err = match Pipeline::new().run(&GenerateRequest::new(
         dir.clone(),
         dir.join("Kconfig"),
         dir.join(defconfig),
@@ -198,12 +199,13 @@ fn select_dma_defconfig_turns_on_has_dma() {
 #[test]
 fn select_unmet_defconfig_is_rejected() {
     let dir = example_dir("select");
-    let err = run(&GenerateRequest::new(
-        dir.clone(),
-        dir.join("Kconfig"),
-        dir.join("unmet_defconfig"),
-    ))
-    .expect_err("DMA_DRIVER without BUS must fail");
+    let err = Pipeline::new()
+        .run(&GenerateRequest::new(
+            dir.clone(),
+            dir.join("Kconfig"),
+            dir.join("unmet_defconfig"),
+        ))
+        .expect_err("DMA_DRIVER without BUS must fail");
     let Error::Validation(report) = err else {
         panic!("expected validation error, got {err}");
     };

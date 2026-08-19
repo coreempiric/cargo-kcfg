@@ -1,3 +1,8 @@
+//! Kconfig definition loader.
+//!
+//! Pipeline step: [`KconfigLoader::load`] follows `source` edges and adapts
+//! nom-kconfig AST nodes into a domain [`SymbolTable`].
+
 use crate::domain::{
     ChoiceGroup, CompareOp, DefaultValue, DomainError, Expression, Limits, RangeBound, ReverseDep,
     Symbol, SymbolTable, SymbolType, Tristate, Value, ValueRange,
@@ -25,6 +30,72 @@ pub struct LoadedKconfig {
     pub loaded_files: Vec<PathBuf>,
 }
 
+/// Loads a Kconfig tree by following `source` directives (never by crawling).
+pub struct KconfigLoader;
+
+impl KconfigLoader {
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Parse `root_kconfig` with `nom-kconfig` and convert the AST into a symbol table.
+    pub fn load(
+        &self,
+        root_dir: &Path,
+        kconfig: &Path,
+        limits: Limits,
+    ) -> Result<LoadedKconfig, Error> {
+        check_file_size(kconfig, limits)?;
+        let relative = relative_to_root(root_dir, kconfig);
+        let kconfig_file = KconfigFile::new(root_dir.to_path_buf(), relative);
+        let content = kconfig_file
+            .read_to_string()
+            .map_err(|e| Error::io(kconfig, e))?;
+        if content.len() as u64 > limits.max_file_bytes {
+            return Err(DomainError::FileTooLarge {
+                path: kconfig.display().to_string(),
+                size: content.len() as u64,
+                max: limits.max_file_bytes,
+            }
+            .into());
+        }
+        let input = KconfigInput::new_extra(&content, kconfig_file);
+        let (remaining, parsed) = parse_kconfig(input).map_err(|e| {
+            Error::Parse(format!(
+                "could not parse `{}`: {e}. Fix the Kconfig syntax and try again",
+                kconfig.display()
+            ))
+        })?;
+        let leftover = remaining.fragment().trim();
+        if !leftover.is_empty() {
+            return Err(Error::Parse(format!(
+                "unparsed trailing input in `{}` (shown below). Fix the Kconfig syntax near that text:\n{}",
+                kconfig.display(),
+                leftover.chars().take(200).collect::<String>()
+            )));
+        }
+
+        let mut table = SymbolTable::new();
+        let mut loaded_files = Vec::new();
+        let mut walker = Walker {
+            table: &mut table,
+            loaded_files: &mut loaded_files,
+            limits,
+        };
+        walker.walk_kconfig(&parsed, 0, Vec::new())?;
+        Ok(LoadedKconfig {
+            table,
+            loaded_files,
+        })
+    }
+}
+
+impl Default for KconfigLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Parse `root_kconfig` with `nom-kconfig` and convert the AST into a symbol table.
 ///
 /// `source` entries are followed by the parser (and then walked here). The
@@ -34,48 +105,7 @@ pub fn load_kconfig(
     kconfig: &Path,
     limits: Limits,
 ) -> Result<LoadedKconfig, Error> {
-    check_file_size(kconfig, limits)?;
-    let relative = relative_to_root(root_dir, kconfig);
-    let kconfig_file = KconfigFile::new(root_dir.to_path_buf(), relative);
-    let content = kconfig_file
-        .read_to_string()
-        .map_err(|e| Error::io(kconfig, e))?;
-    if content.len() as u64 > limits.max_file_bytes {
-        return Err(DomainError::FileTooLarge {
-            path: kconfig.display().to_string(),
-            size: content.len() as u64,
-            max: limits.max_file_bytes,
-        }
-        .into());
-    }
-    let input = KconfigInput::new_extra(&content, kconfig_file);
-    let (remaining, parsed) = parse_kconfig(input).map_err(|e| {
-        Error::Parse(format!(
-            "could not parse `{}`: {e}. Fix the Kconfig syntax and try again",
-            kconfig.display()
-        ))
-    })?;
-    let leftover = remaining.fragment().trim();
-    if !leftover.is_empty() {
-        return Err(Error::Parse(format!(
-            "unparsed trailing input in `{}` (shown below). Fix the Kconfig syntax near that text:\n{}",
-            kconfig.display(),
-            leftover.chars().take(200).collect::<String>()
-        )));
-    }
-
-    let mut table = SymbolTable::new();
-    let mut loaded_files = Vec::new();
-    let mut walker = Walker {
-        table: &mut table,
-        loaded_files: &mut loaded_files,
-        limits,
-    };
-    walker.walk_kconfig(&parsed, 0, Vec::new())?;
-    Ok(LoadedKconfig {
-        table,
-        loaded_files,
-    })
+    KconfigLoader::new().load(root_dir, kconfig, limits)
 }
 
 fn relative_to_root(root: &Path, file: &Path) -> PathBuf {
@@ -670,7 +700,7 @@ fn convert_macro(m: &Macro) -> Result<Expression, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::load_kconfig;
+    use super::KconfigLoader;
     use crate::domain::{Expression, Limits};
     use std::fs;
 
@@ -694,7 +724,8 @@ mod tests {
              \timply LOGGING\n",
         )
         .unwrap();
-        let loaded = load_kconfig(dir.path(), &dir.path().join("Kconfig"), Limits::default())
+        let loaded = KconfigLoader::new()
+            .load(dir.path(), &dir.path().join("Kconfig"), Limits::default())
             .expect("parse");
         let uart = loaded.table.get("UART").expect("UART");
         assert_eq!(uart.selects.len(), 1);
@@ -730,7 +761,8 @@ mod tests {
              endchoice\n",
         )
         .unwrap();
-        let loaded = load_kconfig(dir.path(), &dir.path().join("Kconfig"), Limits::default())
+        let loaded = KconfigLoader::new()
+            .load(dir.path(), &dir.path().join("Kconfig"), Limits::default())
             .expect("parse");
         assert_eq!(loaded.table.choices().len(), 2);
         let console = &loaded.table.choices()[0];
