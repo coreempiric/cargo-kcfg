@@ -1,0 +1,7 @@
+config FOO
+	bool "Foo"
+	default y
+
+config SIZE
+	int "Size"
+	default 32

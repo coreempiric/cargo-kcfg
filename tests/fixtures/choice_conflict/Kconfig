@@ -1,0 +1,9 @@
+choice
+	prompt "Console backend"
+
+config UART_CONSOLE
+	bool "UART console"
+
+config RTT_CONSOLE
+	bool "RTT console"
+endchoice

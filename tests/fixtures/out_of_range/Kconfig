@@ -1,0 +1,4 @@
+config SIZE
+	int "Size"
+	range 1 8
+	default 4

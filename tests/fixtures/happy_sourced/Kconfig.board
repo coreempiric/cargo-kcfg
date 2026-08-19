@@ -1,0 +1,4 @@
+config BOARD_EXTRA
+	bool "Board extra option"
+	default y
+	depends on FOO

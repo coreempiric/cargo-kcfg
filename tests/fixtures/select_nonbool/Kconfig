@@ -1,0 +1,7 @@
+config SIZE
+	int
+	default 1
+
+config FOO
+	bool
+	select SIZE

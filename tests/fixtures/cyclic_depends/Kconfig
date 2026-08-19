@@ -1,0 +1,9 @@
+config A
+	bool
+	depends on B
+	default y
+
+config B
+	bool
+	depends on A
+	default y

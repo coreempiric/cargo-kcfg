@@ -1,0 +1,3 @@
+# Invalid `depends on`: UART requires BUS.
+CONFIG_BUS=n
+CONFIG_UART=y

@@ -1,0 +1,8 @@
+config DEP
+	bool "Dependency"
+	default n
+
+config CHILD
+	bool "Child"
+	depends on DEP
+	default n

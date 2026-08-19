@@ -1,0 +1,2 @@
+# Invalid `range`: BUF_SIZE must be 8..=64.
+CONFIG_BUF_SIZE=256

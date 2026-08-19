@@ -1,0 +1,21 @@
+mainmenu "choice exclusivity example"
+
+choice
+	prompt "Console backend"
+	default UART_CONSOLE
+
+config UART_CONSOLE
+	bool "UART console"
+
+config RTT_CONSOLE
+	bool "RTT console"
+
+config USB_CONSOLE
+	bool "USB console"
+endchoice
+
+config CONSOLE_BAUD
+	int "UART baud rate"
+	depends on UART_CONSOLE
+	range 1200 921600
+	default 115200

@@ -2,5 +2,24 @@
 name = "cargo-kconfig"
 version = "0.0.1"
 edition = "2024"
+license = "MIT"
+description = "Cargo subcommand bringing Linux/Zephyr-style Kconfig support to Rust projects"
+readme = "README.md"
+keywords = ["kconfig", "cargo", "embedded", "configuration"]
+categories = ["command-line-utilities", "development-tools::cargo-plugins"]
+
+[lib]
+name = "cargo_kconfig"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cargo-kconfig"
+path = "src/main.rs"
 
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
+nom-kconfig = "0.13"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
