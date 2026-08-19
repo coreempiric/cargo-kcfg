@@ -171,7 +171,11 @@ pub fn validate_symbol_name(name: &str, limits: Limits) -> Result<(), DomainErro
         return Err(DomainError::symbol_name_too_long(name, limits));
     }
     let mut chars = name.chars();
-    let first = chars.next().expect("non-empty");
+    let Some(first) = chars.next() else {
+        return Err(DomainError::InvalidSymbolName {
+            name: name.to_string(),
+        });
+    };
     if !first.is_ascii_alphabetic() && first != '_' {
         return Err(DomainError::InvalidSymbolName {
             name: name.to_string(),

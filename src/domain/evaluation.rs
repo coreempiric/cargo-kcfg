@@ -81,9 +81,10 @@ pub fn evaluate(
                 kind: IssueKind::UnknownSymbol,
                 symbol: Some(assignment.name.clone()),
                 message: format!(
-                    "unknown symbol `{}` assigned on line {}",
+                    "`{}` is assigned on line {} but is not defined in Kconfig. Remove it from the defconfig, or add `config {}` to Kconfig",
                     crate::domain::config_ident(&assignment.name),
-                    assignment.line
+                    assignment.line,
+                    assignment.name
                 ),
             });
         }
@@ -241,9 +242,8 @@ impl EvaluationContext<'_> {
     }
 
     fn check_range(&mut self, symbol: &Symbol, value: &Value) -> Result<(), ValidationIssue> {
-        let kind = match symbol.kind {
-            Some(SymbolType::Int) | Some(SymbolType::Hex) => symbol.kind.unwrap(),
-            _ => return Ok(()),
+        let Some(kind @ (SymbolType::Int | SymbolType::Hex)) = symbol.kind else {
+            return Ok(());
         };
         let n = value.as_int().map_err(|err| ValidationIssue {
             kind: IssueKind::TypeMismatch,
@@ -280,7 +280,7 @@ impl EvaluationContext<'_> {
                     kind: IssueKind::OutOfRange,
                     symbol: Some(symbol.name.clone()),
                     message: format!(
-                        "{kind} value {n} for `{}` is outside the allowed range {min}..={max}",
+                        "`{}={n}` is outside the allowed {kind} range {min}..={max}. Set it to a value in that range in the defconfig",
                         crate::domain::config_ident(&symbol.name)
                     ),
                 });
@@ -293,8 +293,8 @@ impl EvaluationContext<'_> {
         match bound {
             RangeBound::Number(n) => Ok(*n),
             RangeBound::Symbol(name) => {
-                if looks_like_tristate_const(name) {
-                    return Ok(tristate_const(name).unwrap() as i64);
+                if let Some(t) = tristate_const(name) {
+                    return Ok(t as i64);
                 }
                 self.resolve(name)
                     .and_then(|v| v.as_int())
@@ -372,13 +372,13 @@ impl EvaluationContext<'_> {
                     .selects
                     .iter()
                     .cloned()
-                    .map(move |dep| (from.clone(), "selects", dep));
+                    .map(move |dep| (from.clone(), "select", dep));
                 let from = symbol.name.clone();
                 let implies = symbol
                     .implies
                     .iter()
                     .cloned()
-                    .map(move |dep| (from.clone(), "implies", dep));
+                    .map(move |dep| (from.clone(), "imply", dep));
                 selects.chain(implies)
             })
             .collect();
@@ -388,9 +388,11 @@ impl EvaluationContext<'_> {
                     kind: IssueKind::UnknownSymbol,
                     symbol: Some(dep.symbol.clone()),
                     message: format!(
-                        "`{}` {verb} unknown symbol `{}`",
+                        "`{}` has `{verb} {}`, but `{}` is not defined. Add `config {}` to Kconfig, or remove that `{verb}`",
                         crate::domain::config_ident(&from),
-                        crate::domain::config_ident(&dep.symbol)
+                        dep.symbol,
+                        crate::domain::config_ident(&dep.symbol),
+                        dep.symbol
                     ),
                 }),
                 Some(target) => match target.kind {
@@ -399,8 +401,9 @@ impl EvaluationContext<'_> {
                         kind: IssueKind::TypeMismatch,
                         symbol: Some(dep.symbol.clone()),
                         message: format!(
-                            "`{}` {verb} `{}` which is {kind}; select/imply targets must be bool or tristate",
+                            "`{}` has `{verb} {}`, but `{}` is {kind}; {verb} can only target bool or tristate. Point it at a bool or tristate, or remove it",
                             crate::domain::config_ident(&from),
+                            dep.symbol,
                             crate::domain::config_ident(&dep.symbol)
                         ),
                     }),
@@ -575,7 +578,7 @@ impl EvaluationContext<'_> {
                     kind: IssueKind::UnknownSymbol,
                     symbol: Some(name.clone()),
                     message: format!(
-                        "choice `{}` defaults to `{}`, which is not a member of the choice",
+                        "choice `{}` defaults to `{}`, which is not a member. Change `default` to one of the choice members",
                         choice.display_name(),
                         crate::domain::config_ident(&name)
                     ),
@@ -643,7 +646,7 @@ impl EvaluationContext<'_> {
             self.report.push(choice_conflict(
                 choice,
                 format!(
-                    "choice `{}` has multiple selected members: {}",
+                    "choice `{}` has more than one member enabled ({}). Keep exactly one at `y` and set the others to `n` in the defconfig",
                     choice.display_name(),
                     join_idents(&yes)
                 ),
@@ -654,10 +657,11 @@ impl EvaluationContext<'_> {
             self.report.push(choice_conflict(
                 choice,
                 format!(
-                    "choice `{}` has `{}` set to y, so other members cannot be m ({})",
+                    "choice `{}` has `{}=y`, so {} cannot be `m`. Set those members to `n`, or set `{}=m`",
                     choice.display_name(),
                     crate::domain::config_ident(yes[0]),
-                    join_idents(&module)
+                    join_idents(&module),
+                    crate::domain::config_ident(yes[0])
                 ),
             ));
             return Ok(());
@@ -666,7 +670,10 @@ impl EvaluationContext<'_> {
         if !any_enabled && !choice.optional {
             self.report.push(choice_conflict(
                 choice,
-                format!("choice `{}` has no selected member", choice.display_name()),
+                format!(
+                    "choice `{}` has no member enabled. Set one member to `y` in the defconfig, or mark the choice `optional`",
+                    choice.display_name()
+                ),
             ));
         }
         Ok(())
@@ -680,7 +687,7 @@ impl EvaluationContext<'_> {
             return Err(choice_conflict(
                 choice,
                 format!(
-                    "choice `{}` has type {kind}; choices must be bool or tristate",
+                    "choice `{}` has type {kind}; choices must be bool or tristate. Change the choice type in Kconfig",
                     choice.display_name()
                 ),
             ));
@@ -705,7 +712,7 @@ impl EvaluationContext<'_> {
                     kind: IssueKind::TypeMismatch,
                     symbol: Some(name.clone()),
                     message: format!(
-                        "choice `{}` is {kind} but member `{}` is {member_kind}",
+                        "choice `{}` is {kind} but member `{}` is {member_kind}. Give that member type {kind}, or change the choice type in Kconfig",
                         choice.display_name(),
                         crate::domain::config_ident(name)
                     ),
@@ -762,6 +769,9 @@ impl EvaluationContext<'_> {
                 continue;
             }
             let selectors = self.active_selectors(&symbol.name)?;
+            let ident = crate::domain::config_ident(&symbol.name);
+            let deps = depends_display(&symbol);
+            let hint = unmet_fix_hint(&symbol, &ident);
             if !selectors.is_empty() {
                 let listed = selectors
                     .iter()
@@ -772,9 +782,7 @@ impl EvaluationContext<'_> {
                     kind: IssueKind::UnmetDependency,
                     symbol: Some(symbol.name.clone()),
                     message: format!(
-                        "`{}` is selected by {listed} but its dependencies are not met ({}). Enable those dependencies, or remove the `select`",
-                        crate::domain::config_ident(&symbol.name),
-                        depends_display(&symbol)
+                        "`{ident}` was turned on by `select` from {listed}, but `{deps}` is not satisfied. {hint}, or remove the `select`"
                     ),
                 });
             } else if let Some(assignment) = self.assignments.get(&symbol.name) {
@@ -782,8 +790,7 @@ impl EvaluationContext<'_> {
                     kind: IssueKind::UnmetDependency,
                     symbol: Some(symbol.name.clone()),
                     message: format!(
-                        "assignment `{}={}` is not valid because dependencies are not met",
-                        crate::domain::config_ident(&symbol.name),
+                        "`{ident}={}` is not allowed because `{deps}` is not satisfied. {hint}",
                         assignment.raw
                     ),
                 });
@@ -791,11 +798,7 @@ impl EvaluationContext<'_> {
                 self.report.push(ValidationIssue {
                     kind: IssueKind::UnmetDependency,
                     symbol: Some(symbol.name.clone()),
-                    message: format!(
-                        "`{}` is enabled but its dependencies are not met ({})",
-                        crate::domain::config_ident(&symbol.name),
-                        depends_display(&symbol)
-                    ),
+                    message: format!("`{ident}` is enabled but `{deps}` is not satisfied. {hint}"),
                 });
             }
         }
@@ -839,7 +842,30 @@ fn depends_display(symbol: &Symbol) -> String {
     if symbol.depends.is_empty() {
         return "none".into();
     }
-    Expression::and(symbol.depends.clone()).to_string()
+    Expression::and(symbol.depends.clone()).config_display()
+}
+
+fn unmet_fix_hint(symbol: &Symbol, enabled_ident: &str) -> String {
+    match Expression::and(symbol.depends.clone()) {
+        Expression::Symbol(dep) => format!(
+            "Set `{}=y` in the defconfig, or set `{enabled_ident}=n`",
+            crate::domain::config_ident(&dep)
+        ),
+        Expression::Not(inner) => match inner.as_ref() {
+            Expression::Symbol(dep) => format!(
+                "Set `{}=n` in the defconfig, or set `{enabled_ident}=n`",
+                crate::domain::config_ident(dep)
+            ),
+            other => format!(
+                "Adjust the defconfig so `!{}` is satisfied, or set `{enabled_ident}=n`",
+                other.config_display()
+            ),
+        },
+        other => format!(
+            "Adjust the defconfig so `{}` is satisfied, or set `{enabled_ident}=n`",
+            other.config_display()
+        ),
+    }
 }
 
 fn format_cycle(cycle: &[String]) -> String {
@@ -848,7 +874,7 @@ fn format_cycle(cycle: &[String]) -> String {
         .map(|name| crate::domain::config_ident(name))
         .collect::<Vec<_>>()
         .join(" -> ");
-    format!("cyclic dependency: {path}")
+    format!("cyclic dependency: {path}. Remove one `depends on` along that cycle in Kconfig")
 }
 
 fn choice_conflict(choice: &ChoiceGroup, message: String) -> ValidationIssue {
@@ -871,16 +897,22 @@ fn is_disabled(value: &Value) -> bool {
     !value.to_tristate().is_enabled()
 }
 
-fn looks_like_tristate_const(name: &str) -> bool {
-    matches!(name, "y" | "Y" | "m" | "M" | "n" | "N")
-}
-
 fn tristate_const(name: &str) -> Option<Tristate> {
     match name {
         "y" | "Y" => Some(Tristate::Yes),
         "m" | "M" => Some(Tristate::Module),
         "n" | "N" => Some(Tristate::No),
         _ => None,
+    }
+}
+
+fn expected_literal(kind: SymbolType) -> &'static str {
+    match kind {
+        SymbolType::Bool => "`y` or `n`",
+        SymbolType::Tristate => "`y`, `m`, or `n`",
+        SymbolType::Int => "a decimal integer (for example `32`)",
+        SymbolType::Hex => "a hexadecimal value (for example `0x10`)",
+        SymbolType::String => "a quoted string (for example `\"board\"`)",
     }
 }
 
@@ -913,9 +945,9 @@ pub(crate) fn parse_assignment(
         kind: IssueKind::TypeMismatch,
         symbol: Some(symbol.name.clone()),
         message: format!(
-            "value `{trimmed}` is not valid for {} symbol `{}`",
-            kind,
-            crate::domain::config_ident(&symbol.name)
+            "`{}={trimmed}` is not a valid {kind} value. Use {}",
+            crate::domain::config_ident(&symbol.name),
+            expected_literal(kind)
         ),
     })
 }
@@ -1203,6 +1235,7 @@ mod tests {
             .with_type(SymbolType::Bool);
         let err = parse_assignment(&foo, "hello", limits).unwrap_err();
         assert_eq!(err.kind, crate::domain::IssueKind::TypeMismatch);
+        assert!(err.message.contains("Use `y` or `n`"), "{}", err.message);
     }
 
     #[test]
@@ -1358,9 +1391,9 @@ mod tests {
         .unwrap_err();
         assert!(err.has_kind(crate::domain::IssueKind::UnmetDependency));
         let text = err.to_string();
-        assert!(text.contains("selected by `CONFIG_DRIVER`"), "{text}");
-        assert!(text.contains("BUS"), "{text}");
-        assert!(text.contains("Enable those dependencies"), "{text}");
+        assert!(text.contains("`select` from `CONFIG_DRIVER`"), "{text}");
+        assert!(text.contains("CONFIG_BUS"), "{text}");
+        assert!(text.contains("Set `CONFIG_BUS=y`"), "{text}");
         assert!(!err.has_warning_kind(crate::domain::IssueKind::UnmetDependency));
     }
 
@@ -1382,6 +1415,10 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.has_kind(crate::domain::IssueKind::UnmetDependency));
+        let text = err.to_string();
+        assert!(text.contains("`CONFIG_FOO=y`"), "{text}");
+        assert!(text.contains("CONFIG_DEP"), "{text}");
+        assert!(text.contains("Set `CONFIG_DEP=y`"), "{text}");
         assert!(!err.has_warning_kind(crate::domain::IssueKind::UnmetDependency));
     }
 
@@ -1694,7 +1731,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.has_kind(crate::domain::IssueKind::ChoiceConflict));
-        assert!(err.to_string().contains("multiple selected"));
+        assert!(err.to_string().contains("more than one member enabled"));
     }
 
     #[test]

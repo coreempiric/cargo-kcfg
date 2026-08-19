@@ -4,5 +4,6 @@
 
 pub mod codegen;
 pub mod defconfig;
+pub mod discover;
 pub mod kconfig;
 pub mod pipeline;

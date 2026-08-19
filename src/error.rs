@@ -5,7 +5,7 @@ use thiserror::Error;
 /// Top-level error type used by the library and CLI.
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("failed to read `{path}`: {source}")]
+    #[error("failed to read `{path}`: {source}. Check that the file exists and is readable")]
     Io {
         path: PathBuf,
         #[source]
@@ -15,10 +15,10 @@ pub enum Error {
     #[error("{0}")]
     Domain(#[from] DomainError),
 
-    #[error("kconfig parse error:\n{0}")]
+    #[error("kconfig parse error: {0}")]
     Parse(String),
 
-    #[error("validation failed:\n{0}")]
+    #[error("{0}")]
     Validation(ValidationReport),
 
     #[error("{0}")]

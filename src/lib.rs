@@ -8,6 +8,7 @@ pub mod cli;
 pub mod domain;
 pub mod error;
 pub mod infra;
+pub mod telemetry;
 
 pub use domain::{
     Assignment, AssignmentSet, ChoiceGroup, DependencyGraph, EvaluatedConfig, Expression, Limits,
@@ -15,4 +16,6 @@ pub use domain::{
 };
 pub use error::Error;
 pub use infra::codegen::Generated;
-pub use infra::pipeline::{GenerateRequest, GenerateResult, run, write_outputs};
+pub use infra::discover::{find_unique_defconfig, resolve_defconfig, resolve_kconfig};
+pub use infra::pipeline::{GenerateRequest, GenerateResult, run, run_build_script, write_outputs};
+pub use telemetry::telemetry::{Telemetry, TelemetryError};

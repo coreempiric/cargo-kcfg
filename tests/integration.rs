@@ -178,7 +178,7 @@ fn select_unmet_target_deps_is_rejected() {
     assert!(report.has_kind(IssueKind::UnmetDependency), "{report}");
     assert!(report.to_string().contains("CONFIG_HAS_DMA"), "{report}");
     assert!(
-        report.to_string().contains("Enable those dependencies"),
+        report.to_string().contains("Set `CONFIG_BUS=y`"),
         "{report}"
     );
 }
@@ -236,7 +236,10 @@ fn rejects_choice_with_two_members_enabled() {
     let dir = fixture("choice_conflict");
     let report = expect_validation(run(&request(&dir, "bad_defconfig")));
     assert!(report.has_kind(IssueKind::ChoiceConflict), "{report}");
-    assert!(report.to_string().contains("multiple selected"), "{report}");
+    assert!(
+        report.to_string().contains("more than one member enabled"),
+        "{report}"
+    );
 }
 
 #[test]

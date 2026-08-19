@@ -276,7 +276,7 @@ fn depends_unmet_defconfig_is_rejected() {
         "depends",
         "unmet_defconfig",
         IssueKind::UnmetDependency,
-        &["CONFIG_UART"],
+        &["CONFIG_UART", "CONFIG_BUS"],
     );
 }
 
@@ -286,7 +286,7 @@ fn choice_conflict_defconfig_is_rejected() {
         "choice",
         "conflict_defconfig",
         IssueKind::ChoiceConflict,
-        &["CONFIG_UART_CONSOLE", "CONFIG_RTT_CONSOLE"],
+        &["CONFIG_UART_CONSOLE", "CONFIG_RTT_CONSOLE", "n"],
     );
 }
 
@@ -326,7 +326,7 @@ fn errors_depends_on_keyword_is_rejected() {
         "errors",
         "depends_unmet_defconfig",
         IssueKind::UnmetDependency,
-        &["CONFIG_UART"],
+        &["CONFIG_UART", "CONFIG_BUS"],
     );
 }
 
@@ -336,7 +336,7 @@ fn errors_select_keyword_is_rejected() {
         "errors",
         "select_unmet_defconfig",
         IssueKind::UnmetDependency,
-        &["CONFIG_HAS_DMA", "CONFIG_DMA_DRIVER", "BUS"],
+        &["CONFIG_HAS_DMA", "CONFIG_DMA_DRIVER", "CONFIG_BUS"],
     );
 }
 
@@ -366,7 +366,7 @@ fn errors_choice_keyword_is_rejected() {
         "errors",
         "choice_conflict_defconfig",
         IssueKind::ChoiceConflict,
-        &["CONFIG_UART_CONSOLE", "CONFIG_RTT_CONSOLE"],
+        &["CONFIG_UART_CONSOLE", "CONFIG_RTT_CONSOLE", "n"],
     );
 }
 

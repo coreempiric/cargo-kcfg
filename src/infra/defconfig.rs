@@ -39,12 +39,14 @@ fn parse_line(line: &str, line_no: u32, limits: Limits) -> Result<Option<Assignm
     }
     let (lhs, rhs) = trimmed.split_once('=').ok_or_else(|| {
         Error::Usage(format!(
-            "malformed assignment on line {line_no}: expected `CONFIG_NAME=value`"
+            "malformed assignment on line {line_no}: expected `CONFIG_NAME=value`. Fix that line in the defconfig"
         ))
     })?;
     let ident = lhs.trim();
     if ident.is_empty() {
-        return Err(Error::Usage(format!("empty symbol name on line {line_no}")));
+        return Err(Error::Usage(format!(
+            "empty symbol name on line {line_no}. Use `CONFIG_NAME=value`"
+        )));
     }
     let name = strip_config_prefix(ident);
     validate_symbol_name(name, limits)?;

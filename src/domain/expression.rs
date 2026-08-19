@@ -50,7 +50,10 @@ impl Expression {
     pub fn and(parts: Vec<Self>) -> Self {
         match parts.len() {
             0 => Self::Constant(Value::Bool(true)),
-            1 => parts.into_iter().next().expect("len is 1"),
+            1 => match parts.into_iter().next() {
+                Some(part) => part,
+                None => Self::Constant(Value::Bool(true)),
+            },
             _ => Self::And(parts),
         }
     }
@@ -58,7 +61,10 @@ impl Expression {
     pub fn or(parts: Vec<Self>) -> Self {
         match parts.len() {
             0 => Self::Constant(Value::Bool(false)),
-            1 => parts.into_iter().next().expect("len is 1"),
+            1 => match parts.into_iter().next() {
+                Some(part) => part,
+                None => Self::Constant(Value::Bool(false)),
+            },
             _ => Self::Or(parts),
         }
     }
@@ -81,6 +87,39 @@ impl Expression {
             })
         } else {
             Ok(())
+        }
+    }
+
+    /// Render the expression with `CONFIG_` names so messages match defconfig syntax.
+    pub fn config_display(&self) -> String {
+        match self {
+            Self::Symbol(name) => super::symbol::config_ident(name),
+            Self::Constant(v) => v.to_string(),
+            Self::Not(inner) => format!("!{}", inner.config_display()),
+            Self::And(parts) => {
+                let joined = parts
+                    .iter()
+                    .map(Self::config_display)
+                    .collect::<Vec<_>>()
+                    .join(" && ");
+                format!("({joined})")
+            }
+            Self::Or(parts) => {
+                let joined = parts
+                    .iter()
+                    .map(Self::config_display)
+                    .collect::<Vec<_>>()
+                    .join(" || ");
+                format!("({joined})")
+            }
+            Self::Compare { left, op, right } => {
+                format!(
+                    "({} {} {})",
+                    left.config_display(),
+                    op.as_str(),
+                    right.config_display()
+                )
+            }
         }
     }
 
@@ -177,5 +216,14 @@ mod tests {
             Expression::Not(Box::new(Expression::symbol("y"))),
         ]);
         assert_eq!(expr.referenced_symbols(), ["A"]);
+    }
+
+    #[test]
+    fn config_display_uses_config_prefix() {
+        let expr = Expression::And(vec![
+            Expression::symbol("BUS"),
+            Expression::Not(Box::new(Expression::symbol("POLL"))),
+        ]);
+        assert_eq!(expr.config_display(), "(CONFIG_BUS && !CONFIG_POLL)");
     }
 }

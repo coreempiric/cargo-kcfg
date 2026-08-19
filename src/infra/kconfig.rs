@@ -49,11 +49,16 @@ pub fn load_kconfig(
         .into());
     }
     let input = KconfigInput::new_extra(&content, kconfig_file);
-    let (remaining, parsed) = parse_kconfig(input).map_err(|e| Error::Parse(e.to_string()))?;
+    let (remaining, parsed) = parse_kconfig(input).map_err(|e| {
+        Error::Parse(format!(
+            "could not parse `{}`: {e}. Fix the Kconfig syntax and try again",
+            kconfig.display()
+        ))
+    })?;
     let leftover = remaining.fragment().trim();
     if !leftover.is_empty() {
         return Err(Error::Parse(format!(
-            "unparsed trailing input in `{}`:\n{}",
+            "unparsed trailing input in `{}` (shown below). Fix the Kconfig syntax near that text:\n{}",
             kconfig.display(),
             leftover.chars().take(200).collect::<String>()
         )));
@@ -232,7 +237,10 @@ fn collect_choice_members_into(entries: &[Entry], out: &mut Vec<String>) -> Resu
             Entry::If(if_entry) => collect_choice_members_into(&if_entry.entries, out)?,
             Entry::Menu(menu) => collect_choice_members_into(&menu.entries, out)?,
             Entry::Choice(_) => {
-                return Err(Error::Parse("nested `choice` is not supported".into()));
+                return Err(Error::Parse(
+                    "nested `choice` is not supported. Flatten the inner choice into the outer one, or move it out"
+                        .into(),
+                ));
             }
             _ => {}
         }
@@ -430,7 +438,7 @@ fn imply_target_name(symbol: &NomSymbol) -> Result<String, Error> {
     match symbol {
         NomSymbol::NonConstant(name) => Ok(name.clone()),
         NomSymbol::Constant(_) => Err(Error::Parse(
-            "imply target must be a non-constant symbol name".into(),
+            "imply target must be a symbol name, not a constant. Write `imply FOO` with a defined bool or tristate".into(),
         )),
     }
 }

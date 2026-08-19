@@ -48,15 +48,14 @@ fn feature_only() {}
 From a `build.rs`:
 
 ```rust
-let result = cargo_kconfig::run(&request)?;
-cargo_kconfig::write_outputs(&result, &out_dir.join("config.rs"), &out_dir.join(".config"))?;
-for warning in &result.evaluated.warnings {
-    println!("cargo:warning={}", warning.message);
-}
-for cfg in result.generated.rustc_cfgs {
-    println!("cargo:rustc-cfg={cfg}");
+fn main() {
+    if cargo_kconfig::run_build_script().is_err() {
+        std::process::exit(1);
+    }
 }
 ```
+
+That helper finds `Kconfig` and a single `*_defconfig` (or `KCONFIG_DEFCONFIG`), writes `config.rs` / `.config` into `OUT_DIR`, and prints `cargo:rustc-cfg` lines. Several `*_defconfig` files are an error unless you name one.
 
 See the buildable examples:
 
@@ -70,20 +69,20 @@ See the buildable examples:
 | `examples/errors` | Each keyword that must **fail**: `depends on`, `select`, `imply` (user `y`), `if`, `choice`, `range`. Valid defaults: `ok_defconfig` and `imply_respected_defconfig` |
 
 ```bash
-cargo run --manifest-path examples/depends/Cargo.toml
+KCONFIG_DEFCONFIG=bus_defconfig cargo run --manifest-path examples/depends/Cargo.toml
 KCONFIG_DEFCONFIG=no_bus_defconfig cargo run --manifest-path examples/depends/Cargo.toml
 
-cargo run --manifest-path examples/firmware/Cargo.toml
+KCONFIG_DEFCONFIG=debug_defconfig cargo run --manifest-path examples/firmware/Cargo.toml
 KCONFIG_DEFCONFIG=prod_defconfig cargo run --manifest-path examples/firmware/Cargo.toml
 
-cargo run --manifest-path examples/select/Cargo.toml
+KCONFIG_DEFCONFIG=uart_defconfig cargo run --manifest-path examples/select/Cargo.toml
 KCONFIG_DEFCONFIG=dma_defconfig cargo run --manifest-path examples/select/Cargo.toml
 KCONFIG_DEFCONFIG=imply_defconfig cargo run --manifest-path examples/select/Cargo.toml
 
-cargo run --manifest-path examples/choice/Cargo.toml
+KCONFIG_DEFCONFIG=uart_defconfig cargo run --manifest-path examples/choice/Cargo.toml
 KCONFIG_DEFCONFIG=rtt_defconfig cargo run --manifest-path examples/choice/Cargo.toml
 
-cargo run --manifest-path examples/errors/Cargo.toml
+KCONFIG_DEFCONFIG=ok_defconfig cargo run --manifest-path examples/errors/Cargo.toml
 KCONFIG_DEFCONFIG=imply_respected_defconfig cargo run --manifest-path examples/errors/Cargo.toml
 ```
 

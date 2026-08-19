@@ -1,8 +1,9 @@
-use crate::domain::EvaluatedConfig;
 use crate::error::Error;
+use crate::infra::discover::{resolve_defconfig, resolve_kconfig};
 use crate::infra::pipeline::{GenerateRequest, run as run_pipeline, write_outputs};
+use crate::telemetry_info;
 use clap::{Parser, Subcommand};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 /// Cargo subcommand that evaluates Kconfig definitions and generates Rust constants.
@@ -83,8 +84,9 @@ fn dispatch(cli: Cli) -> Result<(), Error> {
 fn cmd_check(args: &IoArgs) -> Result<(), Error> {
     let request = resolve_request(args)?;
     let result = run_pipeline(&request)?;
-    print_warnings(&result.evaluated);
-    eprintln!(
+    telemetry_info!(
+        symbols = result.evaluated.table.len(),
+        kconfig = %request.kconfig.display(),
         "kconfig: ok ({} symbols from {})",
         result.evaluated.table.len(),
         request.kconfig.display()
@@ -108,8 +110,10 @@ fn cmd_build(args: &BuildArgs, typecheck: bool) -> Result<(), Error> {
         .clone()
         .unwrap_or_else(|| out_dir.join(".config"));
     write_outputs(&result, &config_rs, &dotconfig)?;
-    print_warnings(&result.evaluated);
-    eprintln!(
+    telemetry_info!(
+        symbols = result.evaluated.table.len(),
+        config_rs = %config_rs.display(),
+        dotconfig = %dotconfig.display(),
         "kconfig: wrote {} and {} ({} symbols)",
         config_rs.display(),
         dotconfig.display(),
@@ -125,77 +129,23 @@ fn cmd_build(args: &BuildArgs, typecheck: bool) -> Result<(), Error> {
     }
     if typecheck {
         typecheck_config_rs(&result.generated.config_rs)?;
-        eprintln!("kconfig: generated constants type-checked");
+        telemetry_info!("kconfig: generated constants type-checked");
     }
     Ok(())
 }
 
 fn resolve_request(args: &IoArgs) -> Result<GenerateRequest, Error> {
-    let root = args
-        .root
-        .clone()
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let kconfig = args.kconfig.clone().unwrap_or_else(|| root.join("Kconfig"));
-    if !kconfig.is_file() {
-        return Err(Error::Usage(format!(
-            "Kconfig file not found: {}",
-            kconfig.display()
-        )));
-    }
-    let defconfig = match &args.defconfig {
+    let root = match &args.root {
         Some(path) => path.clone(),
-        None => find_defconfig(&root)?,
+        None => std::env::current_dir().map_err(|e| {
+            Error::Usage(format!(
+                "cannot determine the current directory: {e}. Pass --root DIR"
+            ))
+        })?,
     };
-    if !defconfig.is_file() {
-        return Err(Error::Usage(format!(
-            "defconfig file not found: {}",
-            defconfig.display()
-        )));
-    }
+    let kconfig = resolve_kconfig(&root, args.kconfig.as_deref())?;
+    let defconfig = resolve_defconfig(&root, args.defconfig.as_deref())?;
     Ok(GenerateRequest::new(root, kconfig, defconfig))
-}
-
-fn find_defconfig(root: &Path) -> Result<PathBuf, Error> {
-    let direct = root.join("defconfig");
-    if direct.is_file() {
-        return Ok(direct);
-    }
-    let mut matches = collect_defconfigs(root)?;
-    let configs_dir = root.join("configs");
-    if configs_dir.is_dir() {
-        matches.extend(collect_defconfigs(&configs_dir)?);
-    }
-    match matches.len() {
-        0 => Err(Error::Usage(
-            "no `*_defconfig` or `defconfig` file found; pass --defconfig".into(),
-        )),
-        1 => Ok(matches.remove(0)),
-        _ => Err(Error::Usage(format!(
-            "multiple defconfig files found ({}); pass --defconfig",
-            matches
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))),
-    }
-}
-
-fn collect_defconfigs(dir: &Path) -> Result<Vec<PathBuf>, Error> {
-    let mut out = Vec::new();
-    let entries = std::fs::read_dir(dir).map_err(|e| Error::io(dir, e))?;
-    for entry in entries {
-        let entry = entry.map_err(|e| Error::io(dir, e))?;
-        let path = entry.path();
-        if path.is_file()
-            && let Some(name) = path.file_name().and_then(|n| n.to_str())
-            && name.ends_with("_defconfig")
-        {
-            out.push(path);
-        }
-    }
-    out.sort();
-    Ok(out)
 }
 
 fn typecheck_config_rs(config_rs: &str) -> Result<(), Error> {
@@ -204,7 +154,7 @@ fn typecheck_config_rs(config_rs: &str) -> Result<(), Error> {
     let mut source = config_rs.to_string();
     source.push_str("\nfn main() {\n    let _ = std::mem::size_of_val(&Tristate::No);\n}\n");
     std::fs::write(&rs_path, source).map_err(|e| Error::io(&rs_path, e))?;
-    let status = Command::new("rustc")
+    let output = Command::new("rustc")
         .arg("--edition")
         .arg("2024")
         .arg("--crate-type")
@@ -212,18 +162,22 @@ fn typecheck_config_rs(config_rs: &str) -> Result<(), Error> {
         .arg("-o")
         .arg(dir.join("kconfig_check"))
         .arg(&rs_path)
-        .status()
-        .map_err(|e| Error::Usage(format!("failed to invoke rustc: {e}")))?;
-    if !status.success() {
-        return Err(Error::Usage("generated config.rs did not compile".into()));
+        .output()
+        .map_err(|e| {
+            Error::Usage(format!(
+                "failed to invoke rustc: {e}. Install rustc or put it on PATH"
+            ))
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let detail = stderr.trim();
+        return Err(Error::Usage(if detail.is_empty() {
+            "generated config.rs did not compile. Inspect the generated file and fix the Kconfig types".into()
+        } else {
+            format!("generated config.rs did not compile. rustc reported:\n{detail}")
+        }));
     }
     Ok(())
-}
-
-fn print_warnings(evaluated: &EvaluatedConfig) {
-    for warning in &evaluated.warnings {
-        eprintln!("kconfig: warning: {}", warning.message);
-    }
 }
 
 fn tempfile_or_local() -> Result<PathBuf, Error> {
