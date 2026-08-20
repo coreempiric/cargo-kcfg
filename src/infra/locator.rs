@@ -1,6 +1,6 @@
 //! Locate `Kconfig` and a single `*_defconfig` without crawling the tree.
 //!
-//! Used by [`crate::cli::CheckCommand`] / [`crate::cli::BuildCommand`] and by
+//! Used by [`crate::cli::CheckCommand`], [`crate::cli::BuildCommand`], [`crate::cli::TestCommand`], and by
 //! [`crate::infra::build_script::BuildScript`] before [`crate::infra::pipeline::Pipeline`].
 
 use crate::error::Error;

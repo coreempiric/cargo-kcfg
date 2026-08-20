@@ -2,7 +2,8 @@
 //!
 //! # Navigation
 //!
-//! Binary: [`Application`] (from `main`) → [`cli::Cli`] → command
+//! Binary: [`cli::Cli::run`] → [`cli::Cli::execute`] → [`cli::Commands::execute`]
+//! → [`cli::CheckCommand`] / [`cli::BuildCommand`] / [`cli::TestCommand`]
 //! → [`infra::locator::ProjectLocator`] → [`infra::pipeline::Pipeline`].
 //!
 //! Library `build.rs`: [`BuildScript`].
@@ -11,14 +12,12 @@
 //! Infrastructure (`infra`) loads Kconfig/`*_defconfig` files, evaluates them,
 //! and generates `.config`, `config.rs`, and `rustc-cfg` flags.
 
-pub mod app;
 pub mod cli;
 pub mod domain;
 pub mod error;
 pub mod infra;
 pub mod telemetry;
 
-pub use app::Application;
 pub use domain::{
     Assignment, AssignmentSet, ChoiceGroup, DependencyGraph, EvaluatedConfig, Evaluator,
     Expression, Limits, Symbol, SymbolTable, SymbolType, Tristate, ValidationReport, Value,

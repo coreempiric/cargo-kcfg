@@ -1,11 +1,33 @@
-//! Command objects for `cargo kconfig check|build|test`.
+//! CLI entry — start here after `main`.
 //!
-//! [`Cli::run`] parses argv (stripping the extra `kconfig` token Cargo inserts)
-//! and dispatches to [`CheckCommand`], [`BuildCommand`], or [`TestCommand`].
+//! Jump path (every name is a method in this crate):
+//!
+//! ```text
+//! main
+//!   └─ Cli::run
+//!        ├─ Cli::from_args
+//!        └─ Cli::execute
+//!             └─ Commands::execute
+//!                  ├─ CheckCommand::execute
+//!                  ├─ BuildCommand::execute
+//!                  └─ TestCommand::execute
+//!                       ├─ ProjectLocator::resolve      (src/infra/locator.rs)
+//!                       ├─ Pipeline::run                (src/infra/pipeline.rs)
+//!                       │    ├─ KconfigLoader::load
+//!                       │    ├─ DefconfigLoader::load
+//!                       │    ├─ Evaluator::evaluate
+//!                       │    └─ CodeGenerator::generate
+//!                       ├─ ArtifactWriter::write        (build / test)
+//!                       └─ GeneratedSourceChecker       (test only)
+//!
+//! crate build.rs
+//!   └─ BuildScript::run                     (src/infra/build_script.rs)
+//!        └─ same locator → pipeline → writer path
+//! ```
 
 use crate::error::Error;
 use crate::infra::locator::ProjectLocator;
-use crate::infra::pipeline::{ArtifactWriter, GenerateRequest, Pipeline};
+use crate::infra::pipeline::{ArtifactWriter, GenerateRequest, GenerateResult, Pipeline};
 use crate::telemetry_info;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -22,15 +44,16 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Commands {
     /// Parse, evaluate, and validate without writing artefacts.
-    Check(IoArgs),
+    Check(CheckCommand),
     /// Validate and write `.config`, `config.rs`, and optional `rustc-cfg` lines.
-    Build(BuildArgs),
+    Build(BuildCommand),
     /// Validate, generate artefacts, and type-check the generated constants.
-    Test(BuildArgs),
+    Test(TestCommand),
 }
 
+/// Shared `--root` / `--kconfig` / `--defconfig` flags.
 #[derive(Debug, Clone, clap::Args)]
-pub struct IoArgs {
+pub struct ProjectArgs {
     /// Project root used to resolve `source` paths.
     #[arg(long)]
     pub root: Option<PathBuf>,
@@ -42,10 +65,18 @@ pub struct IoArgs {
     pub defconfig: Option<PathBuf>,
 }
 
+/// `cargo kconfig check` — validate without writing artefacts.
 #[derive(Debug, Clone, clap::Args)]
-pub struct BuildArgs {
+pub struct CheckCommand {
     #[command(flatten)]
-    pub io: IoArgs,
+    pub io: ProjectArgs,
+}
+
+/// `cargo kconfig build` — validate and write `.config` / `config.rs`.
+#[derive(Debug, Clone, clap::Args)]
+pub struct BuildCommand {
+    #[command(flatten)]
+    pub io: ProjectArgs,
     /// Directory for generated files.
     #[arg(long)]
     pub out_dir: Option<PathBuf>,
@@ -60,13 +91,21 @@ pub struct BuildArgs {
     pub emit_rustc_cfg: bool,
 }
 
+/// `cargo kconfig test` — build artefacts and type-check the generated constants.
+#[derive(Debug, Clone, clap::Args)]
+pub struct TestCommand {
+    #[command(flatten)]
+    pub build: BuildCommand,
+}
+
 impl Cli {
-    /// Entry used by [`crate::Application`]. Strips the extra `kconfig` argument Cargo inserts.
+    /// Parse argv and run the selected command.
     pub fn run() -> Result<(), Error> {
-        Self::run_from_args(std::env::args_os())
+        Self::from_args(std::env::args_os()).execute()
     }
 
-    pub fn run_from_args<I, T>(args: I) -> Result<(), Error>
+    /// Strip the extra `kconfig` token Cargo inserts, then parse into [`Cli`].
+    pub fn from_args<I, T>(args: I) -> Self
     where
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone,
@@ -75,9 +114,10 @@ impl Cli {
         if args.get(1).and_then(|a| a.to_str()) == Some("kconfig") {
             args.remove(1);
         }
-        Self::parse_from(args).execute()
+        Self::parse_from(args)
     }
 
+    /// Dispatch to the selected [`Commands`] variant.
     pub fn execute(self) -> Result<(), Error> {
         self.command.execute()
     }
@@ -86,14 +126,14 @@ impl Cli {
 impl Commands {
     pub fn execute(self) -> Result<(), Error> {
         match self {
-            Self::Check(args) => CheckCommand::new(args).execute(),
-            Self::Build(args) => BuildCommand::new(args).execute(),
-            Self::Test(args) => TestCommand::new(args).execute(),
+            Self::Check(command) => command.execute(),
+            Self::Build(command) => command.execute(),
+            Self::Test(command) => command.execute(),
         }
     }
 }
 
-impl IoArgs {
+impl ProjectArgs {
     fn project_root(&self) -> Result<PathBuf, Error> {
         match &self.root {
             Some(path) => Ok(path.clone()),
@@ -111,18 +151,9 @@ impl IoArgs {
     }
 }
 
-/// `cargo kconfig check` — validate without writing artefacts.
-pub struct CheckCommand {
-    args: IoArgs,
-}
-
 impl CheckCommand {
-    pub fn new(args: IoArgs) -> Self {
-        Self { args }
-    }
-
-    pub fn execute(&self) -> Result<(), Error> {
-        let request = self.args.request()?;
+    pub fn execute(self) -> Result<(), Error> {
+        let request = self.io.request()?;
         let result = Pipeline::new().run(&request)?;
         telemetry_info!(
             symbols = result.evaluated.table.len(),
@@ -135,40 +166,24 @@ impl CheckCommand {
     }
 }
 
-/// `cargo kconfig build` — validate and write `.config` / `config.rs`.
-pub struct BuildCommand {
-    args: BuildArgs,
-    typecheck: bool,
-}
-
 impl BuildCommand {
-    pub fn new(args: BuildArgs) -> Self {
-        Self {
-            args,
-            typecheck: false,
-        }
+    pub fn execute(self) -> Result<(), Error> {
+        let _result = self.generate_and_write()?;
+        Ok(())
     }
 
-    fn with_typecheck(mut self) -> Self {
-        self.typecheck = true;
-        self
-    }
-
-    pub fn execute(&self) -> Result<(), Error> {
-        let request = self.args.io.request()?;
+    fn generate_and_write(self) -> Result<GenerateResult, Error> {
+        let request = self.io.request()?;
         let result = Pipeline::new().run(&request)?;
         let out_dir = self
-            .args
             .out_dir
             .clone()
             .unwrap_or_else(|| request.root_dir.clone());
         let config_rs = self
-            .args
             .config_rs
             .clone()
             .unwrap_or_else(|| out_dir.join("config.rs"));
         let dotconfig = self
-            .args
             .dotconfig
             .clone()
             .unwrap_or_else(|| out_dir.join(".config"));
@@ -182,31 +197,19 @@ impl BuildCommand {
             dotconfig.display(),
             result.evaluated.table.len()
         );
-        if self.args.emit_rustc_cfg {
+        if self.emit_rustc_cfg {
             result.generated.print_cargo_cfg_lines();
         }
-        if self.typecheck {
-            GeneratedSourceChecker::new().typecheck(&result.generated.config_rs)?;
-            telemetry_info!("kconfig: generated constants type-checked");
-        }
-        Ok(())
+        Ok(result)
     }
-}
-
-/// `cargo kconfig test` — build artefacts and type-check the generated constants.
-pub struct TestCommand {
-    inner: BuildCommand,
 }
 
 impl TestCommand {
-    pub fn new(args: BuildArgs) -> Self {
-        Self {
-            inner: BuildCommand::new(args).with_typecheck(),
-        }
-    }
-
-    pub fn execute(&self) -> Result<(), Error> {
-        self.inner.execute()
+    pub fn execute(self) -> Result<(), Error> {
+        let result = self.build.generate_and_write()?;
+        GeneratedSourceChecker::new().typecheck(&result.generated.config_rs)?;
+        telemetry_info!("kconfig: generated constants type-checked");
+        Ok(())
     }
 }
 
@@ -261,17 +264,4 @@ impl Default for GeneratedSourceChecker {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Entry used by the binary. Strips the extra `kconfig` argument Cargo inserts.
-pub fn run_from_args<I, T>(args: I) -> Result<(), Error>
-where
-    I: IntoIterator<Item = T>,
-    T: Into<std::ffi::OsString> + Clone,
-{
-    Cli::run_from_args(args)
-}
-
-pub fn run() -> Result<(), Error> {
-    Cli::run()
 }
