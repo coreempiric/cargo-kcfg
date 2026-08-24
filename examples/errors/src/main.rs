@@ -1,4 +1,8 @@
-include!(concat!(env!("OUT_DIR"), "/config.rs"));
+pub mod config {
+    cargo_kconfig_macros::include_config!();
+}
+
+use config::*;
 
 fn main() {
     println!("BUS              = {CONFIG_BUS}");
@@ -12,23 +16,28 @@ fn main() {
     println!("RTT_CONSOLE      = {CONFIG_RTT_CONSOLE}");
     println!("BUF_SIZE         = {CONFIG_BUF_SIZE}");
 
-    #[cfg(CONFIG_UART)]
-    println!("compiled with UART (depends on BUS)");
+    if CONFIG_UART {
+        println!("compiled with UART (depends on BUS)");
+    }
 
-    #[cfg(CONFIG_HAS_DMA)]
-    println!("compiled with DMA helper (selected by DMA_DRIVER)");
+    if CONFIG_HAS_DMA {
+        println!("compiled with DMA helper (selected by DMA_DRIVER)");
+    }
 
-    #[cfg(CONFIG_HAS_RTC)]
-    println!("compiled with RTC helper (implied by BOARD_WANTS_RTC)");
+    if CONFIG_HAS_RTC {
+        println!("compiled with RTC helper (implied by BOARD_WANTS_RTC)");
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::config::*;
 
-    #[cfg(CONFIG_BUS)]
     #[test]
     fn ok_defconfig_satisfies_every_keyword() {
+        if !CONFIG_BUS {
+            return;
+        }
         assert!(CONFIG_BUS);
         assert!(CONFIG_UART);
         assert!(CONFIG_UART_IRQ);
@@ -42,9 +51,11 @@ mod tests {
         let _buf: u8 = CONFIG_BUF_SIZE;
     }
 
-    #[cfg(not(CONFIG_BUS))]
     #[test]
     fn imply_without_bus_leaves_rtc_off() {
+        if CONFIG_BUS {
+            return;
+        }
         assert!(!CONFIG_BUS);
         assert!(CONFIG_BOARD_WANTS_RTC);
         assert!(!CONFIG_HAS_RTC);

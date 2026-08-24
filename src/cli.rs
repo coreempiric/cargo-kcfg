@@ -11,7 +11,7 @@
 //!                  ├─ CheckCommand::execute
 //!                  ├─ BuildCommand::execute
 //!                  └─ TestCommand::execute
-//!                       ├─ ProjectLocator::resolve      (src/infra/locator.rs)
+//!                       ├─ ProjectLocator::discover / resolve  (src/infra/locator.rs)
 //!                       ├─ Pipeline::run                (src/infra/pipeline.rs)
 //!                       │    ├─ KconfigLoader::load
 //!                       │    ├─ DefconfigLoader::load
@@ -137,11 +137,14 @@ impl ProjectArgs {
     fn project_root(&self) -> Result<PathBuf, Error> {
         match &self.root {
             Some(path) => Ok(path.clone()),
-            None => std::env::current_dir().map_err(|e| {
-                Error::Usage(format!(
-                    "cannot determine the current directory: {e}. Pass --root DIR"
-                ))
-            }),
+            None => {
+                let cwd = std::env::current_dir().map_err(|e| {
+                    Error::Usage(format!(
+                        "cannot determine the current directory: {e}. Pass --root DIR"
+                    ))
+                })?;
+                Ok(ProjectLocator::discover(cwd)?.root().to_path_buf())
+            }
         }
     }
 

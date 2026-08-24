@@ -1,6 +1,8 @@
 //! Cargo `build.rs` entry — the same locator → pipeline → writer path as the CLI.
 //!
-//! Crate build scripts call [`BuildScript::run`] (or the [`run_build_script`] alias).
+//! Optional. Prefer `include_config!` so member crates do not need a `build.rs`.
+//! Use this helper only when the crate itself needs `cargo:rustc-cfg` for
+//! `#[cfg(CONFIG_*)]`.
 
 use crate::error::Error;
 use crate::infra::locator::ProjectLocator;
@@ -40,7 +42,7 @@ impl BuildScript {
     }
 
     fn run_inner(&self) -> Result<(), Error> {
-        let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").map_err(|_| {
+        let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").map_err(|_| {
             Error::Usage(
                 "CARGO_MANIFEST_DIR is not set. run_build_script is for Cargo build.rs".into(),
             )
@@ -49,9 +51,20 @@ impl BuildScript {
             Error::Usage("OUT_DIR is not set. run_build_script is for Cargo build.rs".into())
         })?);
 
-        telemetry_info!(root = %root.display(), "kconfig build.rs starting in {}", root.display());
+        telemetry_info!(
+            manifest = %manifest.display(),
+            "kconfig build.rs starting in {}",
+            manifest.display()
+        );
 
-        let locator = ProjectLocator::new(root);
+        let locator = ProjectLocator::discover(manifest.clone())?;
+        if locator.root() != manifest.as_path() {
+            telemetry_info!(
+                workspace = %locator.root().display(),
+                "using workspace Kconfig in {}",
+                locator.root().display()
+            );
+        }
         let request = locator.resolve(None, None)?;
         let result = self.pipeline.run(&request)?;
 
@@ -61,6 +74,7 @@ impl BuildScript {
         result.generated.print_cargo_cfg_lines();
 
         println!("cargo:rerun-if-env-changed=KCONFIG_DEFCONFIG");
+        println!("cargo:rerun-if-env-changed=CARGO_WORKSPACE_DIR");
         println!("cargo:rerun-if-changed={}", request.kconfig.display());
         println!("cargo:rerun-if-changed={}", request.defconfig.display());
         for loaded in &result.loaded_files {
@@ -88,8 +102,9 @@ impl Default for BuildScript {
 /// Load, evaluate, and emit artefacts from a crate `build.rs`.
 ///
 /// Discovers `Kconfig` and a unique `*_defconfig` (or `KCONFIG_DEFCONFIG`),
-/// writes `config.rs` / `.config` into `OUT_DIR`, and prints `cargo:rustc-cfg`
-/// lines. Errors are reported through telemetry and returned.
+/// walking up from `CARGO_MANIFEST_DIR` to a workspace root when this package
+/// has no `Kconfig`. Writes `config.rs` / `.config` into `OUT_DIR`, and prints
+/// `cargo:rustc-cfg` lines. Errors are reported through telemetry and returned.
 pub fn run_build_script() -> Result<(), Error> {
     BuildScript::new().run()
 }

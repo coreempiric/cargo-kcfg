@@ -8,6 +8,19 @@ readme = "README.md"
 keywords = ["kconfig", "cargo", "embedded", "configuration"]
 categories = ["command-line-utilities", "development-tools::cargo-plugins"]
 
+[workspace]
+members = ["macros"]
+exclude = [
+    "examples/minimal",
+    "examples/depends",
+    "examples/firmware",
+    "examples/select",
+    "examples/choice",
+    "examples/errors",
+    "examples/workspace",
+]
+resolver = "2"
+
 [lib]
 name = "cargo_kconfig"
 path = "src/lib.rs"

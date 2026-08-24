@@ -1,4 +1,8 @@
-include!(concat!(env!("OUT_DIR"), "/config.rs"));
+pub mod config {
+    cargo_kconfig_macros::include_config!();
+}
+
+use config::*;
 
 fn main() {
     println!("board qemu     = {CONFIG_BOARD_QEMU}");
@@ -24,22 +28,26 @@ fn main() {
         println!("network frame buffer length: {}", frames.len());
     }
 
-    #[cfg(CONFIG_TCP)]
-    println!("compiled with TCP");
+    if CONFIG_TCP {
+        println!("compiled with TCP");
+    }
 
-    #[cfg(CONFIG_TLS)]
-    println!("compiled with TLS (depends on NETWORK && TCP)");
+    if CONFIG_TLS {
+        println!("compiled with TLS (depends on NETWORK && TCP)");
+    }
 
-    #[cfg(CONFIG_MDNS)]
-    println!("compiled with mDNS (sourced from Kconfig.net, depends on UDP)");
+    if CONFIG_MDNS {
+        println!("compiled with mDNS (sourced from Kconfig.net, depends on UDP)");
+    }
 
-    #[cfg(CONFIG_BARE_METAL_HOOKS)]
-    println!("compiled with bare-metal hooks");
+    if CONFIG_BARE_METAL_HOOKS {
+        println!("compiled with bare-metal hooks");
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::config::*;
 
     #[test]
     fn shared_board_constants() {
@@ -51,9 +59,11 @@ mod tests {
         assert_eq!(CONFIG_FLASH_BASE, 0x800_0000);
     }
 
-    #[cfg(CONFIG_NETWORK)]
     #[test]
     fn debug_defconfig_enables_the_network_stack() {
+        if !CONFIG_NETWORK {
+            return;
+        }
         assert!(CONFIG_LOGGING);
         assert_eq!(CONFIG_LOG_LEVEL, 5);
         assert!(CONFIG_NETWORK);
@@ -70,9 +80,11 @@ mod tests {
         let _frames = [0u8; CONFIG_NET_BUFFER as usize];
     }
 
-    #[cfg(not(CONFIG_NETWORK))]
     #[test]
     fn prod_defconfig_drops_network_children() {
+        if CONFIG_NETWORK {
+            return;
+        }
         assert!(!CONFIG_LOGGING);
         assert_eq!(CONFIG_LOG_LEVEL, 0);
         assert!(!CONFIG_NETWORK);

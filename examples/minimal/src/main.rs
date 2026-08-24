@@ -1,4 +1,8 @@
-include!(concat!(env!("OUT_DIR"), "/config.rs"));
+pub mod config {
+    cargo_kconfig_macros::include_config!();
+}
+
+use config::*;
 
 fn main() {
     if CONFIG_FOO {
@@ -7,11 +11,11 @@ fn main() {
         println!("Buffer length: {}", buf.len());
     }
 
-    #[cfg(CONFIG_FEATURE)]
-    println!("CONFIG_FEATURE is enabled via rustc-cfg");
-
-    #[cfg(not(CONFIG_FEATURE))]
-    println!("CONFIG_FEATURE is disabled");
+    if CONFIG_FEATURE {
+        println!("CONFIG_FEATURE is enabled");
+    } else {
+        println!("CONFIG_FEATURE is disabled");
+    }
 
     if CONFIG_BOARD_EXTRA {
         println!("board extra is on");
@@ -20,7 +24,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::config::*;
 
     #[test]
     fn generated_constants_have_expected_types() {

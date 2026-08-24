@@ -3,7 +3,7 @@
 //! [`Pipeline::run`] is the single method called after a
 //! [`crate::infra::locator::ProjectLocator`] has produced a [`GenerateRequest`].
 
-use crate::domain::{EvaluatedConfig, Evaluator, Limits};
+use crate::domain::{AssignmentSet, EvaluatedConfig, Evaluator, Limits};
 use crate::error::Error;
 use crate::infra::codegen::{CodeGenerator, Generated};
 use crate::infra::defconfig::DefconfigLoader;
@@ -72,6 +72,20 @@ impl Pipeline {
             loaded_files,
             generated,
         })
+    }
+
+    /// Load `Kconfig` and evaluate `assignments` without writing artefacts.
+    pub fn evaluate(
+        &self,
+        root_dir: &Path,
+        kconfig: &Path,
+        assignments: &AssignmentSet,
+        limits: Limits,
+    ) -> Result<EvaluatedConfig, Error> {
+        let loaded = self.kconfig.load(root_dir, kconfig, limits)?;
+        Evaluator::new(limits)
+            .evaluate(loaded.table, assignments)
+            .map_err(Error::Validation)
     }
 }
 

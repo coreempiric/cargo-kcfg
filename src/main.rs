@@ -10,10 +10,10 @@ use cargo_kconfig::{Telemetry, telemetry_error, telemetry_info};
 fn main() {
     match Telemetry::new() {
         Ok(_telemetry) => {
-            telemetry_info!("Telemetry initialised");
+            telemetry_info!("cargo-kconfig: telemetry initialised");
             match Cli::run() {
                 Ok(()) => {
-                    telemetry_info!("main: Application finished");
+                    telemetry_info!("cargo-kconfig main: Application finished");
                 }
                 Err(err) => {
                     telemetry_error!("{err}");

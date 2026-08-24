@@ -1,6 +1,6 @@
 use cargo_kconfig::Error;
 use cargo_kconfig::domain::{IssueKind, Value};
-use cargo_kconfig::{GenerateRequest, Pipeline};
+use cargo_kconfig::{ConfigTest, GenerateRequest, Pipeline, ProjectLocator};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -304,4 +304,33 @@ fn compile_with_generated(config_rs: &str, body: &str) {
         "generated program failed:\n{}",
         String::from_utf8_lossy(&run.stderr)
     );
+}
+
+#[test]
+fn workspace_member_discovers_root_kconfig() {
+    let member = fixture("workspace_layout/crate");
+    let loc = ProjectLocator::discover(&member).expect("discover");
+    assert!(
+        loc.root().join("Kconfig").is_file(),
+        "expected workspace Kconfig, root={}",
+        loc.root().display()
+    );
+    assert!(loc.root().ends_with("workspace_layout"));
+}
+
+#[test]
+fn workspace_config_test_branches_on_good_and_bad_defconfigs() {
+    let root = fixture("workspace_layout");
+    let probe = ConfigTest::at(&root);
+    let ok = probe
+        .evaluate("configs/ok_defconfig")
+        .expect("ok defconfig");
+    assert_eq!(ok.get("UART"), Some(&Value::Bool(true)));
+
+    match probe.evaluate("configs/cases/unmet_defconfig") {
+        Err(Error::Validation(report)) => {
+            assert!(report.has_kind(IssueKind::UnmetDependency), "{report}");
+        }
+        other => panic!("expected validation error, got {other:?}"),
+    }
 }

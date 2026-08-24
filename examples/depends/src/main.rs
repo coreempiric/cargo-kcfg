@@ -1,4 +1,8 @@
-include!(concat!(env!("OUT_DIR"), "/config.rs"));
+pub mod config {
+    cargo_kconfig_macros::include_config!();
+}
+
+use config::*;
 
 fn main() {
     println!("BUS        = {CONFIG_BUS}");
@@ -9,23 +13,26 @@ fn main() {
     println!("POLL_LOOP  = {CONFIG_POLL_LOOP}  (depends on !BUS)");
     println!("UART_BAUD  = {CONFIG_UART_BAUD}  (defined inside `if UART`)");
 
-    #[cfg(CONFIG_UART)]
-    println!("compiled with UART (depends on BUS)");
+    if CONFIG_UART {
+        println!("compiled with UART (depends on BUS)");
+    } else {
+        println!("compiled without UART");
+    }
 
-    #[cfg(not(CONFIG_UART))]
-    println!("compiled without UART");
-
-    #[cfg(CONFIG_POLL_LOOP)]
-    println!("compiled with the no-bus poll loop");
+    if CONFIG_POLL_LOOP {
+        println!("compiled with the no-bus poll loop");
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::config::*;
 
-    #[cfg(CONFIG_BUS)]
     #[test]
     fn bus_defconfig_enables_uart_graph() {
+        if !CONFIG_BUS {
+            return;
+        }
         assert!(CONFIG_BUS);
         assert!(CONFIG_UART);
         assert!(CONFIG_UART_DMA);
@@ -36,9 +43,11 @@ mod tests {
         let _baud: u32 = CONFIG_UART_BAUD;
     }
 
-    #[cfg(not(CONFIG_BUS))]
     #[test]
     fn no_bus_defconfig_uses_rtt_and_poll_loop() {
+        if CONFIG_BUS {
+            return;
+        }
         assert!(!CONFIG_BUS);
         assert!(!CONFIG_UART);
         assert!(!CONFIG_UART_DMA);

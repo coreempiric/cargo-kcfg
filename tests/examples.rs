@@ -387,3 +387,32 @@ fn errors_example_builds_for_valid_defconfigs() {
     cargo_test_example("errors", "ok_defconfig");
     cargo_test_example("errors", "imply_respected_defconfig");
 }
+
+#[test]
+fn workspace_lib_builds_from_member_and_tests_bad_defconfigs() {
+    cargo_test_example("workspace/lib", "configs/qemu_defconfig");
+}
+
+#[test]
+fn workspace_app_uses_lib_config_module() {
+    let dir = example_dir("workspace/app");
+    let target = tempfile::tempdir().expect("target dir");
+    let output = Command::new("cargo")
+        .arg("run")
+        .arg("--offline")
+        .arg("--quiet")
+        .arg("--manifest-path")
+        .arg(dir.join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(target.path())
+        .output()
+        .expect("cargo run workspace app");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "workspace app failed:\n{stdout}\n{stderr}"
+    );
+    assert!(stdout.contains("workspace-virt"), "{stdout}");
+    assert!(stdout.contains("UART is on"), "{stdout}");
+}

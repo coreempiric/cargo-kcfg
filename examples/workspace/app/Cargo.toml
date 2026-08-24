@@ -1,0 +1,8 @@
+[package]
+name = "kconfig-example-workspace-app"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[dependencies]
+kconfig-example-workspace-lib = { path = "../lib" }

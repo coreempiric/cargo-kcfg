@@ -243,3 +243,87 @@ The product may grow toward broader compatibility, but correctness and strict fa
 - A successful run is a reliable signal that the configuration is coherent and suitable for a proper build.
 - The test suite (unit + integration) exercises both success paths and the major failure modes.
 - The design follows TDD, keeps a clear domain model (DDD), and applies defensive checks and resource limits.
+
+
+
+### Description
+
+`run_build_script` currently assumes a single package. It expects `Kconfig`
+and a unique `*_defconfig` next to that package’s `Cargo.toml`.
+
+Many Rust products instead use a virtual Cargo workspace:
+
+- The root `Cargo.toml` contains only `[workspace]` (no `[package]`).
+- `Kconfig` and `configs/*_defconfig` live at the repository root.
+- Member crates (`lib`, `app`, `tests`, …) live in subdirectories.
+
+Cargo does not run a `build.rs` at a virtual workspace root. `OUT_DIR` is
+per-crate. An `include!(concat!(env!("OUT_DIR"), "/config.rs"))` in a
+member therefore reads only that member’s `OUT_DIR`, which only that
+member’s own `build.rs` can populate. `cargo:rustc-cfg` emitted by one
+crate’s build script is invisible when compiling a dependent. `#[path]`
+accepts only a string literal, so it cannot reference `OUT_DIR`.
+
+Without first-class workspace support the plugin forces every member that
+needs the generated constants to:
+
+1. Hand-roll `ProjectLocator` / `Pipeline` paths up to the workspace
+   `Kconfig`.
+2. Keep a `build.rs` next to its own `Cargo.toml`.
+3. Host an `include!` of its private `OUT_DIR`.
+
+That is more overhead than the five-line `build.rs` shown in the README.
+
+### Responsibilities
+
+Today the plugin is responsible for:
+
+- Resolving `Kconfig` as `<CARGO_MANIFEST_DIR>/Kconfig`.
+- Resolving one assignment file from (in order) `KCONFIG_DEFCONFIG`, a
+  unique `*_defconfig` in the manifest directory or `configs/`, or an
+  explicit `--defconfig` path.
+- Writing `config.rs` and `.config` into `OUT_DIR` from
+  `run_build_script`.
+- Emitting `cargo:rustc-cfg` and `cargo:rustc-check-cfg` for enabled
+  boolean and tristate symbols (visible only inside that crate).
+- Exposing the include path
+  `include!(concat!(env!("OUT_DIR"), "/config.rs"))` as the supported way
+  to bring `CONFIG_*` constants into a module
+  (`pub mod config { include!(...); }`).
+
+The CLI subcommands (`check`, `build`, `test`) already accept `--root`
+independently of Cargo workspaces. The build-script helper does not.
+
+### Lacking
+
+Workspace discovery, a zero-`build.rs` include path, and cross-crate cfg
+visibility are not implemented. Candidate approaches:
+
+| Approach | Pros | Cons |
+| --- | --- | --- |
+| Workspace locator inside `run_build_script` | Preserves the five-line `build.rs`. Walk upward from `CARGO_MANIFEST_DIR` (or use `CARGO_WORKSPACE_DIR` when available) until a workspace `Cargo.toml` + `Kconfig` + `configs/*_defconfig` are found. Members continue to `include!` their own `OUT_DIR`. | Users still need `cargo-kconfig` as a build-dependency and a `build.rs`. Each member that includes constants still generates into its private `OUT_DIR`. |
+| Proc-macro `kconfig::include!()` | No consumer `build.rs`. The macro locates the workspace `Kconfig`, evaluates, and expands the `CONFIG_*` constants. Crate root becomes `pub mod config { kconfig::include!(); }`; dependents simply `use lib::config::*;`. | A proc-macro cannot emit `cargo:rustc-cfg`. `#[cfg(CONFIG_FOO)]` therefore requires a build script, or code must use the `bool` constant (`if CONFIG_FOO`). |
+| `cargo kconfig init` | Writes the five-line `build.rs` and the `mod config` include so the user never copies them from the README. | Still produces a `build.rs` per crate that needs generation. Does not by itself locate a workspace `Kconfig`. |
+| Dedicated config crate in the workspace | One member owns the `build.rs` and `pub mod config { include!(...); }`. Other members depend on it and `use config_crate::*;` (or `use lib::config::*;`). Values are shared. | `#[cfg(CONFIG_FOO)]` still does not propagate across the dependency edge. The extra crate is workspace boilerplate the plugin can document but should not require. |
+| Root package instead of a virtual workspace | Root `Cargo.toml` has `[package]` and `[lib] path = "lib/src/lib.rs"`. Root `build.rs` runs, `CARGO_MANIFEST_DIR` is the repository root, and `run_build_script` finds `Kconfig` with no walk. | This is a Cargo layout change for the product, not plugin behaviour. It does not help users who prefer a virtual workspace. |
+| Generate a source-relative `config.rs` | `#[path = "configs/config.rs"] pub mod config;` works because `#[path]` requires a string literal. rustfmt can open the file. | Generated Rust in the source tree is easy to commit by mistake and fights the `OUT_DIR` model. Prefer `include!` of `OUT_DIR` or a proc-macro until the plugin owns a stable path. |
+
+**Preferred order of work**
+
+1. Implement the workspace locator so `run_build_script` is usable from a
+   member crate.
+2. Consider a proc-macro so `build.rs` becomes optional for constant
+   access.
+3. Document that `#[cfg(CONFIG_*)]` is per-crate unless that crate’s own
+   build script emits the cfg lines.
+4. Add a workspace integration-test example (root `Kconfig`,
+   `configs/*_defconfig`, member `lib` that includes the generated
+   constants).
+
+**Non-goals / explicit constraints**
+
+- Do not treat a `build.rs` at a virtual workspace root as supported;
+  Cargo ignores it.
+- Do not expect one crate’s `rustc-cfg` to apply to another crate.
+- Do not promise `#[path = concat!(env!("OUT_DIR"), "/config.rs")]`;
+  rustc requires a string-literal path.

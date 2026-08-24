@@ -6,7 +6,9 @@
 //! → [`cli::CheckCommand`] / [`cli::BuildCommand`] / [`cli::TestCommand`]
 //! → [`infra::locator::ProjectLocator`] → [`infra::pipeline::Pipeline`].
 //!
-//! Library `build.rs`: [`BuildScript`].
+//! Constants: `cargo_kconfig_macros::include_config!` (no consumer `build.rs`).
+//! Optional `build.rs`: [`BuildScript`] when this crate needs `#[cfg(CONFIG_*)]`.
+//! Unit tests: [`ConfigTest`].
 //!
 //! The domain layer (`domain`) is independent of the filesystem and of Cargo.
 //! Infrastructure (`infra`) loads Kconfig/`*_defconfig` files, evaluates them,
@@ -26,6 +28,7 @@ pub use domain::{
 pub use error::Error;
 pub use infra::build_script::{BuildScript, run_build_script};
 pub use infra::codegen::{CodeGenerator, Generated};
+pub use infra::config_test::ConfigTest;
 pub use infra::locator::{
     ProjectLocator, find_unique_defconfig, resolve_defconfig, resolve_kconfig,
 };
