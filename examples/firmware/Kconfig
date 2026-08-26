@@ -1,0 +1,90 @@
+mainmenu "Firmware board configuration"
+
+config BOARD_QEMU
+	bool "QEMU virt board"
+	default y
+
+config BOARD_HAS_SENSOR
+	bool
+	default y if BOARD_QEMU
+
+config HAS_FPU
+	def_bool y
+
+config FLASH_BASE
+	hex "Flash base address"
+	default 0x8000000
+
+menu "Logging"
+
+config LOGGING
+	bool "Enable logging"
+	default y
+
+config LOG_LEVEL
+	int "Log verbosity"
+	range 0 5
+	default 5 if LOGGING
+	default 0
+	depends on LOGGING
+
+endmenu
+
+menu "Networking"
+
+# Hidden helper forced on by NETWORK via `select`.
+config HAS_NET
+	bool
+
+config NETWORK
+	bool "Enable networking"
+	select HAS_NET
+	default y
+
+config NET_DRIVER
+	tristate "Network interface driver"
+	depends on NETWORK
+	default y
+
+config TCP
+	bool "TCP"
+	depends on NETWORK
+	default y
+
+config UDP
+	bool "UDP"
+	depends on NETWORK
+	default n
+
+config TLS
+	bool "TLS (requires TCP)"
+	depends on NETWORK && TCP
+	default n
+
+config NET_BUFFER
+	int "Network buffer bytes"
+	range 64 8192
+	default 2048 if TCP
+	default 512 if UDP
+	default 128
+	depends on NETWORK
+
+endmenu
+
+if NETWORK
+source "Kconfig.net"
+endif
+
+config SPI
+	bool "SPI controller"
+	default y
+
+config SENSOR
+	bool "On-board SPI sensor"
+	depends on SPI && BOARD_HAS_SENSOR
+	default y
+
+config BARE_METAL_HOOKS
+	bool "Hooks used only when networking is disabled"
+	depends on !NETWORK
+	default y

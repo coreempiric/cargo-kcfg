@@ -1,0 +1,24 @@
+config HAS_UART
+	bool
+
+config UART
+	bool "UART"
+	select HAS_UART
+
+config BUS
+	bool
+
+config HAS_DMA
+	bool
+	depends on BUS
+
+config DRIVER
+	bool
+	select HAS_DMA
+
+config LOG
+	bool
+
+config DEBUG
+	bool
+	imply LOG

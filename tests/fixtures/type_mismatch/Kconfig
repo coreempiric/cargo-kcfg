@@ -1,0 +1,7 @@
+config FOO
+	bool "Foo"
+	default n
+
+config SIZE
+	int "Size"
+	default 1

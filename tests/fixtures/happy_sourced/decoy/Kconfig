@@ -1,0 +1,4 @@
+# This file is never sourced. The loader must not pick it up by crawling.
+config DECOY_SYMBOL
+	bool "Should never appear"
+	default y

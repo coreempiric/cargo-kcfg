@@ -1,0 +1,5 @@
+# Invalid `imply` + user assignment: imply does not bypass HAS_RTC's
+# `depends on BUS`, so forcing HAS_RTC=y is rejected.
+CONFIG_BUS=n
+CONFIG_BOARD_WANTS_RTC=y
+CONFIG_HAS_RTC=y

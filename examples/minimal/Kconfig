@@ -1,0 +1,22 @@
+mainmenu "Minimal cargo-kconfig example"
+
+config FOO
+	bool "Enable foo feature"
+	default y
+
+config BUFFER_SIZE
+	int "Buffer size in bytes"
+	range 1 4096
+	default 128
+	depends on FOO
+
+config BOARD_NAME
+	string "Board name"
+	default "qemu"
+
+config FEATURE
+	bool "Optional compile-time feature"
+	default n
+	depends on FOO
+
+source "Kconfig.board"

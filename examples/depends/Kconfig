@@ -1,0 +1,36 @@
+mainmenu "Dependency and visibility example"
+
+config BUS
+	bool "Enable the shared peripheral bus"
+	default y
+
+config UART
+	bool "UART driver"
+	depends on BUS
+	default y
+
+config UART_DMA
+	bool "UART DMA (needs the bus and UART)"
+	depends on BUS && UART
+	default n
+
+config RTT
+	bool "RTT console (does not need the bus)"
+	default n
+
+config CONSOLE
+	bool "Text console"
+	depends on UART || RTT
+	default y
+
+config POLL_LOOP
+	bool "Busy-poll loop used only when the bus is off"
+	depends on !BUS
+	default y
+
+if UART
+config UART_BAUD
+	int "UART baud rate"
+	range 1200 921600
+	default 115200
+endif

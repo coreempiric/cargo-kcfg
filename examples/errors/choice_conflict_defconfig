@@ -1,0 +1,3 @@
+# Invalid `choice`: two members enabled at once.
+CONFIG_UART_CONSOLE=y
+CONFIG_RTT_CONSOLE=y

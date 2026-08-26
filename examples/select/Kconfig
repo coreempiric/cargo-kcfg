@@ -1,0 +1,46 @@
+mainmenu "select and imply example"
+
+# Hidden helper turned on automatically by drivers via `select`.
+config HAS_UART
+	bool
+
+config UART_FOO
+	bool "Acme UART driver"
+	select HAS_UART
+	default n
+
+# Conditional reverse dependency: only selects HAS_UART when pinmux is present.
+config HAS_PINMUX
+	bool
+	default n
+
+config UART_BAR
+	bool "Other UART driver"
+	select HAS_UART if HAS_PINMUX
+	default n
+
+config BUS
+	bool "Peripheral bus"
+	default n
+
+# HAS_DMA depends on BUS. `select` will turn HAS_DMA on when DMA_DRIVER is
+# enabled, but only if BUS is also on — otherwise evaluation errors out.
+config HAS_DMA
+	bool
+	depends on BUS
+
+config DMA_DRIVER
+	bool "DMA-capable driver"
+	select HAS_DMA
+	default n
+
+config LOGGING
+	bool "Logging"
+	default n
+
+# `imply` is a weak default: DEBUG_BUILD turns LOGGING on unless the user
+# sets CONFIG_LOGGING=n, and it will not bypass LOGGING's dependencies.
+config DEBUG_BUILD
+	bool "Debug build"
+	imply LOGGING
+	default n

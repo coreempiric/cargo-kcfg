@@ -1,0 +1,4 @@
+# Invalid: DMA_DRIVER selects HAS_DMA, which depends on BUS.
+# Evaluation must fail until BUS is enabled (see dma_defconfig).
+CONFIG_DMA_DRIVER=y
+CONFIG_BUS=n

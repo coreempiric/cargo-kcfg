@@ -1,0 +1,10 @@
+config DHCP
+	bool "DHCP client"
+	depends on NETWORK
+	default y if UDP
+	default n
+
+config MDNS
+	bool "mDNS responder"
+	depends on NETWORK && UDP
+	default n
