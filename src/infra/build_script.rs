@@ -27,7 +27,7 @@ impl BuildScript {
 
     /// Discover files, evaluate, write `OUT_DIR` artefacts, and emit `cargo:` lines.
     pub fn run(&self) -> Result<(), Error> {
-        let _telemetry = Telemetry::new().map_err(|err| {
+        let _telemetry = Telemetry::new("cargo-kconfig").map_err(|err| {
             Error::Usage(format!(
                 "telemetry init failed: {err}. The kconfig build script cannot continue"
             ))
@@ -35,7 +35,7 @@ impl BuildScript {
         match self.run_inner() {
             Ok(()) => Ok(()),
             Err(err) => {
-                telemetry_error!("{err}");
+                telemetry_error!("{}", err);
                 Err(err)
             }
         }

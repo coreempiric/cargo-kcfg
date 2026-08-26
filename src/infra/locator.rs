@@ -47,7 +47,9 @@ impl ProjectLocator {
         if let Some(workspace) = workspace_dir.as_deref()
             && workspace.join("Kconfig").is_file()
         {
-            return Ok(Self { root: workspace.to_path_buf() });
+            return Ok(Self {
+                root: workspace.to_path_buf(),
+            });
         }
 
         // 2. WORKSPACE CHECK: Scan up for workspace landmarks first
@@ -62,18 +64,20 @@ impl ProjectLocator {
                 }
                 Err(_) => {
                     return Err(Error::Usage(format!(
-                                "No Cargo.toml file found `{}` in the parent workspace layout.",
-                                start.display()
+                        "No Cargo.toml file found `{}` in the parent workspace layout.",
+                        start.display()
                     )));
                 }
             };
-            
+
             // Alternative workspace anchor check (unified lockfile)
             if dir.join("Cargo.lock").exists() && dir.join("Kconfig").is_file() {
                 return Ok(Self { root: dir });
             }
 
-            let Some(parent) = dir.parent() else { break; };
+            let Some(parent) = dir.parent() else {
+                break;
+            };
             dir = parent.to_path_buf();
         }
 
@@ -138,7 +142,8 @@ impl ProjectLocator {
             let path = PathBuf::from(&name);
             telemetry_info!(
                 name = name.as_str(),
-                "KCONFIG_DEFCONFIG is set; resolving `{name}`"
+                "KCONFIG_DEFCONFIG is set; resolving `{}`",
+                name
             );
             return self.named_defconfig(&path);
         }

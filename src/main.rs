@@ -8,15 +8,15 @@ use cargo_kconfig::cli::Cli;
 use cargo_kconfig::{Telemetry, telemetry_error, telemetry_info};
 
 fn main() {
-    match Telemetry::new() {
+    match Telemetry::new("cargo-kconfig") {
         Ok(_telemetry) => {
-            telemetry_info!("cargo-kconfig: telemetry initialised");
+            telemetry_info!("telemetry initialised");
             match Cli::run() {
                 Ok(()) => {
-                    telemetry_info!("cargo-kconfig main: Application finished");
+                    telemetry_info!("Application finished");
                 }
                 Err(err) => {
-                    telemetry_error!("{err}");
+                    telemetry_error!("{}", err);
                     std::process::exit(1);
                 }
             }

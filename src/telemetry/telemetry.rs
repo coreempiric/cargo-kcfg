@@ -2,13 +2,15 @@
 //!
 //! # How to use
 //!
-//! Construct once in `main` and keep the value alive for the process:
+//! Construct once in `main` with a message prefix and keep the value alive
+//! for the process. Every [`telemetry_info!`] / [`telemetry_error!`] call
+//! then prepends that prefix to the log message:
 //!
 //! ```
 //! use cargo_kconfig::{telemetry_error, telemetry_info, Telemetry, TelemetryError};
 //!
 //! # fn main() -> Result<(), TelemetryError> {
-//! let _telemetry = Telemetry::new()?;
+//! let _telemetry = Telemetry::new("cargo-kconfig")?;
 //! telemetry_info!("telemetry ready");
 //! telemetry_error!(code = 1u32, "failure");
 //! # Ok(())
@@ -20,7 +22,11 @@
 //! closed.
 
 use std::fmt;
+use std::sync::OnceLock;
 use tracing_subscriber::{EnvFilter, fmt as tracing_fmt, prelude::*};
+
+static PREFIX: OnceLock<String> = OnceLock::new();
+static PREFIX_DISPLAY: OnceLock<String> = OnceLock::new();
 
 /// Telemetry initialisation failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +56,19 @@ pub struct Telemetry;
 
 impl Telemetry {
     /// Installs process-wide tracing on stderr (once per process).
-    pub fn new() -> Result<Self, TelemetryError> {
+    ///
+    /// `prefix` is prepended to every subsequent [`crate::telemetry_info`] and
+    /// [`crate::telemetry_error`] message (`"{prefix}: {message}"`). An empty
+    /// prefix leaves messages unchanged.
+    pub fn new(prefix: impl Into<String>) -> Result<Self, TelemetryError> {
+        let prefix = prefix.into();
+        let display = if prefix.is_empty() {
+            String::new()
+        } else {
+            format!("{prefix}: ")
+        };
+        let _ = PREFIX.set(prefix);
+        let _ = PREFIX_DISPLAY.set(display);
         tracing_subscriber::registry()
             .with(
                 tracing_fmt::layer()
@@ -65,24 +83,79 @@ impl Telemetry {
 
         Ok(Self)
     }
+
+    /// Prefix installed by [`Telemetry::new`], or an empty string before init.
+    pub fn prefix() -> &'static str {
+        PREFIX.get().map(String::as_str).unwrap_or("")
+    }
 }
 
 impl Drop for Telemetry {
     fn drop(&mut self) {
-        tracing::info!("Telemetry shutting down");
+        tracing::info!(concat!("{}", "Telemetry shutting down"), prefix_display());
     }
+}
+
+/// `"{prefix}: "` or empty. Used by the log macros.
+#[doc(hidden)]
+pub fn prefix_display() -> &'static str {
+    PREFIX_DISPLAY.get().map(String::as_str).unwrap_or("")
 }
 
 /// Logs an INFO event through the global tracing subscriber.
 #[macro_export]
 macro_rules! telemetry_info {
-    ($($arg:tt)+) => { tracing::info!($($arg)+); };
+    (@emit [$($fields:tt)*] $fmt:literal $($rest:tt)*) => {
+        tracing::info!(
+            $($fields)*
+            concat!("{}", $fmt),
+            $crate::telemetry::telemetry::prefix_display()
+            $($rest)*
+        )
+    };
+    (@accum [$($fields:tt)*] $key:ident = % $value:expr, $($rest:tt)+) => {
+        $crate::telemetry_info!(@accum [$($fields)* $key = % $value,] $($rest)+)
+    };
+    (@accum [$($fields:tt)*] $key:ident = ? $value:expr, $($rest:tt)+) => {
+        $crate::telemetry_info!(@accum [$($fields)* $key = ? $value,] $($rest)+)
+    };
+    (@accum [$($fields:tt)*] $key:ident = $value:expr, $($rest:tt)+) => {
+        $crate::telemetry_info!(@accum [$($fields)* $key = $value,] $($rest)+)
+    };
+    (@accum [$($fields:tt)*] $($rest:tt)+) => {
+        $crate::telemetry_info!(@emit [$($fields)*] $($rest)+)
+    };
+    ($($arg:tt)+) => {
+        $crate::telemetry_info!(@accum [] $($arg)+)
+    };
 }
 
 /// Logs an ERROR event through the global tracing subscriber.
 #[macro_export]
 macro_rules! telemetry_error {
-    ($($arg:tt)+) => { tracing::error!($($arg)+); };
+    (@emit [$($fields:tt)*] $fmt:literal $($rest:tt)*) => {
+        tracing::error!(
+            $($fields)*
+            concat!("{}", $fmt),
+            $crate::telemetry::telemetry::prefix_display()
+            $($rest)*
+        )
+    };
+    (@accum [$($fields:tt)*] $key:ident = % $value:expr, $($rest:tt)+) => {
+        $crate::telemetry_error!(@accum [$($fields)* $key = % $value,] $($rest)+)
+    };
+    (@accum [$($fields:tt)*] $key:ident = ? $value:expr, $($rest:tt)+) => {
+        $crate::telemetry_error!(@accum [$($fields)* $key = ? $value,] $($rest)+)
+    };
+    (@accum [$($fields:tt)*] $key:ident = $value:expr, $($rest:tt)+) => {
+        $crate::telemetry_error!(@accum [$($fields)* $key = $value,] $($rest)+)
+    };
+    (@accum [$($fields:tt)*] $($rest:tt)+) => {
+        $crate::telemetry_error!(@emit [$($fields)*] $($rest)+)
+    };
+    ($($arg:tt)+) => {
+        $crate::telemetry_error!(@accum [] $($arg)+)
+    };
 }
 
 #[cfg(test)]
@@ -91,14 +164,31 @@ mod tests {
 
     #[test]
     fn telemetry_init_succeeds_once() {
-        let first = Telemetry::new();
+        let first = Telemetry::new("cargo-kconfig");
         telemetry_info!("Test info message.");
         telemetry_error!("Test error message.");
+        telemetry_info!(code = 7u32, "field plus message");
 
         assert!(first.is_ok(), "telemetry init should succeed");
+        assert_eq!(Telemetry::prefix(), "cargo-kconfig");
+        assert_eq!(prefix_display(), "cargo-kconfig: ");
 
-        let second = Telemetry::new();
+        let second = Telemetry::new("other");
         assert_eq!(second.unwrap_err(), TelemetryError::InitFailed);
+        assert_eq!(
+            Telemetry::prefix(),
+            "cargo-kconfig",
+            "the first prefix must stick"
+        );
+    }
+
+    #[test]
+    fn empty_prefix_adds_no_separator() {
+        assert_eq!(format!(concat!("{}", "hello"), ""), "hello");
+        assert_eq!(
+            format!(concat!("{}", "hello"), "cargo-kconfig: "),
+            "cargo-kconfig: hello"
+        );
     }
 
     #[test]
