@@ -206,10 +206,8 @@ cargo-kcfg = "0.0.1"
 ```
 
 ```rust,no_run
-fn main() {
-    if cargo_kcfg::run_build_script().is_err() {
-        std::process::exit(1);
-    }
+if cargo_kcfg::run_build_script().is_err() {
+    std::process::exit(1);
 }
 ```
 

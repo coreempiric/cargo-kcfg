@@ -38,13 +38,16 @@ impl ProjectLocator {
     ///
     /// Order:
     /// 1. `CARGO_WORKSPACE_DIR`, when that directory contains `Kconfig`.
-    /// 2. Walk parents for a `[workspace]` `Cargo.toml` (or `Cargo.lock` + `Kconfig`).
-    /// 3. `start` itself, if it contains `Kconfig`.
+    /// 2. Walk parents for a `[workspace]` `Cargo.toml` that also has `Kconfig`
+    ///    (or a `Cargo.lock` next to `Kconfig`).
+    /// 3. `start` itself, if it contains `Kconfig` (standalone package).
+    ///
+    /// Directories without `Cargo.toml` are skipped, not treated as an error.
     ///
     /// # Errors
     ///
-    /// [`Error::Usage`] if no Kconfig / workspace layout can be found, or a
-    /// parent walk hits a directory without `Cargo.toml`.
+    /// [`Error::Usage`] if no `Kconfig` is found at `start` or in a parent
+    /// workspace.
     pub fn discover(start: impl Into<PathBuf>) -> Result<Self, Error> {
         let workspace_dir = std::env::var_os("CARGO_WORKSPACE_DIR").map(PathBuf::from);
         Self::discover_from(start.into(), workspace_dir)
@@ -57,31 +60,36 @@ impl ProjectLocator {
         if let Some(workspace) = workspace_dir.as_deref()
             && workspace.join("Kconfig").is_file()
         {
+            telemetry_info!(
+                path = %workspace.display(),
+                "using CARGO_WORKSPACE_DIR Kconfig in {}",
+                workspace.display()
+            );
             return Ok(Self {
                 root: workspace.to_path_buf(),
             });
         }
 
-        // 2. WORKSPACE CHECK: Scan up for workspace landmarks first
         let mut dir = start.clone();
         for _ in 0..MAX_PARENT_WALK {
-            let manifest_path = dir.join("Cargo.toml");
-            match std::fs::read_to_string(&manifest_path) {
-                Ok(toml_content) => {
-                    if toml_content.contains("[workspace]") {
-                        return Ok(Self { root: dir });
-                    }
-                }
-                Err(_) => {
-                    return Err(Error::Usage(format!(
-                        "No Cargo.toml file found `{}` in the parent workspace layout.",
-                        start.display()
-                    )));
-                }
-            };
+            if let Ok(toml_content) = std::fs::read_to_string(dir.join("Cargo.toml"))
+                && toml_content.contains("[workspace]")
+                && dir.join("Kconfig").is_file()
+            {
+                telemetry_info!(
+                    path = %dir.display(),
+                    "using workspace Kconfig in {}",
+                    dir.display()
+                );
+                return Ok(Self { root: dir });
+            }
 
-            // Alternative workspace anchor check (unified lockfile)
-            if dir.join("Cargo.lock").exists() && dir.join("Kconfig").is_file() {
+            if dir.join("Cargo.lock").is_file() && dir.join("Kconfig").is_file() {
+                telemetry_info!(
+                    path = %dir.display(),
+                    "using lockfile-anchored Kconfig in {}",
+                    dir.display()
+                );
                 return Ok(Self { root: dir });
             }
 
@@ -91,15 +99,17 @@ impl ProjectLocator {
             dir = parent.to_path_buf();
         }
 
-        // 3. STANDALONE PACKAGE FALLBACK: If no upper workspace anchor exists,
-        // evaluate if the current sub-crate directory is its own standalone root.
         if start.join("Kconfig").is_file() {
-            telemetry_info!(path = %start.display(), "Using package-local root directory");
+            telemetry_info!(
+                path = %start.display(),
+                "using package-local Kconfig in {}",
+                start.display()
+            );
             return Ok(Self { root: start });
         }
 
         Err(Error::Usage(format!(
-            "No Kconfig found at `{}` or in a parent workspace layout.",
+            "no Kconfig found at `{}` or in a parent workspace. Create Kconfig next to this package's Cargo.toml, place Kconfig at the workspace root, pass --root DIR, or pass --kconfig PATH",
             start.display()
         )))
     }
@@ -350,24 +360,35 @@ mod tests {
         assert!(err.to_string().contains("Kconfig file not found"));
     }
 
+    fn write_kconfig(dir: &std::path::Path) {
+        fs::write(dir.join("Kconfig"), "config FOO\n\tbool\n").unwrap();
+    }
+
+    fn write_workspace_manifest(dir: &std::path::Path, members: &str) {
+        fs::write(
+            dir.join("Cargo.toml"),
+            format!("[workspace]\nmembers = [{members}]\n"),
+        )
+        .unwrap();
+    }
+
     #[test]
-    fn discover_uses_package_kconfig_when_present() {
+    fn discover_uses_cargo_workspace_dir_before_the_walk() {
         let dir = tempfile::tempdir().unwrap();
-        write_package_manifest(dir.path(), "pkg");
-        fs::write(dir.path().join("Kconfig"), "config FOO\n\tbool\n").unwrap();
-        let loc = ProjectLocator::discover(dir.path()).unwrap();
+        write_kconfig(dir.path());
+        let member = dir.path().join("crates").join("app");
+        fs::create_dir_all(&member).unwrap();
+        write_package_manifest(&member, "app");
+        write_kconfig(&member);
+        let loc = ProjectLocator::discover_from(member, Some(dir.path().to_path_buf())).unwrap();
         assert_eq!(loc.root(), dir.path());
     }
 
     #[test]
-    fn discover_walks_up_to_workspace_kconfig() {
+    fn discover_walks_to_workspace_manifest_with_kconfig() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(
-            dir.path().join("Cargo.toml"),
-            "[workspace]\nmembers = [\"lib\"]\n",
-        )
-        .unwrap();
-        fs::write(dir.path().join("Kconfig"), "config FOO\n\tbool\n").unwrap();
+        write_workspace_manifest(dir.path(), "\"lib\"");
+        write_kconfig(dir.path());
         let lib = dir.path().join("lib");
         fs::create_dir(&lib).unwrap();
         write_package_manifest(&lib, "lib");
@@ -376,30 +397,63 @@ mod tests {
     }
 
     #[test]
-    fn package_kconfig_wins_over_workspace() {
+    fn discover_workspace_manifest_wins_over_member_kconfig() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(
-            dir.path().join("Cargo.toml"),
-            "[workspace]\nmembers = [\"lib\"]\n",
-        )
-        .unwrap();
+        write_workspace_manifest(dir.path(), "\"lib\"");
         fs::write(dir.path().join("Kconfig"), "config ROOT\n\tbool\n").unwrap();
         let lib = dir.path().join("lib");
         fs::create_dir(&lib).unwrap();
         write_package_manifest(&lib, "lib");
         fs::write(lib.join("Kconfig"), "config LOCAL\n\tbool\n").unwrap();
         let loc = ProjectLocator::discover(&lib).unwrap();
-        assert_eq!(loc.root(), lib.as_path());
+        assert_eq!(loc.root(), dir.path());
     }
 
     #[test]
-    fn cargo_workspace_dir_is_used_when_member_has_no_kconfig() {
+    fn discover_walks_to_cargo_lock_next_to_kconfig() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("Kconfig"), "config FOO\n\tbool\n").unwrap();
-        let member = dir.path().join("crates").join("app");
-        fs::create_dir_all(&member).unwrap();
-        write_package_manifest(&member, "app");
-        let loc = ProjectLocator::discover_from(member, Some(dir.path().to_path_buf())).unwrap();
+        write_package_manifest(dir.path(), "pkg");
+        fs::write(dir.path().join("Cargo.lock"), "").unwrap();
+        write_kconfig(dir.path());
+        let nested = dir.path().join("src");
+        fs::create_dir(&nested).unwrap();
+        let loc = ProjectLocator::discover(&nested).unwrap();
+        assert_eq!(loc.root(), dir.path());
+    }
+
+    #[test]
+    fn discover_skips_parents_without_cargo_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        write_workspace_manifest(dir.path(), "\"crates/app\"");
+        write_kconfig(dir.path());
+        let nested = dir.path().join("crates").join("app");
+        fs::create_dir_all(&nested).unwrap();
+        write_package_manifest(&nested, "app");
+        let loc = ProjectLocator::discover(&nested).unwrap();
+        assert_eq!(loc.root(), dir.path());
+    }
+
+    #[test]
+    fn discover_skips_workspace_manifest_without_kconfig() {
+        let dir = tempfile::tempdir().unwrap();
+        write_workspace_manifest(dir.path(), "\"mid\"");
+        write_kconfig(dir.path());
+        let mid = dir.path().join("mid");
+        fs::create_dir(&mid).unwrap();
+        write_workspace_manifest(&mid, "\"lib\"");
+        let lib = mid.join("lib");
+        fs::create_dir(&lib).unwrap();
+        write_package_manifest(&lib, "lib");
+        let loc = ProjectLocator::discover(&lib).unwrap();
+        assert_eq!(loc.root(), dir.path());
+    }
+
+    #[test]
+    fn discover_falls_back_to_start_when_no_workspace_kconfig() {
+        let dir = tempfile::tempdir().unwrap();
+        write_package_manifest(dir.path(), "pkg");
+        write_kconfig(dir.path());
+        let loc = ProjectLocator::discover(dir.path()).unwrap();
         assert_eq!(loc.root(), dir.path());
     }
 
