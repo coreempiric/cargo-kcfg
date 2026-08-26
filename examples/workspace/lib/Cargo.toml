@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-cargo-kconfig-macros = { path = "../../../macros" }
+cargo-kcfg-macros = { path = "../../../macros" }
 
 [dev-dependencies]
-cargo-kconfig = { path = "../../.." }
+cargo-kcfg = { path = "../../.." }

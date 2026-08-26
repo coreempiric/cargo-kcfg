@@ -1,12 +1,12 @@
 //! Evaluate known-good or known-bad assignment files from unit tests.
 //!
 //! Compile-time constants come from
-//! `pub mod config { cargo_kconfig_macros::include_config!(); }`.
+//! `pub mod config { cargo_kcfg_macros::include_config!(); }`.
 //! Tests that need to **branch** on a configuration call [`ConfigTest`]:
 //!
 //! ```rust,no_run
-//! use cargo_kconfig::domain::{IssueKind, Value};
-//! use cargo_kconfig::{ConfigTest, Error};
+//! use cargo_kcfg::domain::{IssueKind, Value};
+//! use cargo_kcfg::{ConfigTest, Error};
 //!
 //! let kconfig = ConfigTest::discover().expect("workspace Kconfig");
 //! match kconfig.evaluate("configs/cases/unmet_defconfig") {
@@ -31,6 +31,10 @@ use crate::infra::pipeline::Pipeline;
 use std::path::{Path, PathBuf};
 
 /// Runtime Kconfig evaluation for unit tests.
+///
+/// Compile-time constants still come from `include_config!`. Use this type
+/// when a test must **choose** a defconfig, including an illegal one, and
+/// branch on [`Error::Validation`].
 pub struct ConfigTest {
     locator: ProjectLocator,
     pipeline: Pipeline,
@@ -41,6 +45,11 @@ pub struct ConfigTest {
 impl ConfigTest {
     /// Locate `Kconfig` from `CARGO_MANIFEST_DIR` (or the current directory),
     /// walking up to a workspace root when this package has no `Kconfig`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] if the project directory cannot be determined or
+    /// [`ProjectLocator::discover`] fails.
     pub fn discover() -> Result<Self, Error> {
         let start = match std::env::var_os("CARGO_MANIFEST_DIR") {
             Some(dir) => PathBuf::from(dir),
@@ -58,6 +67,7 @@ impl ConfigTest {
         Self::from_locator(ProjectLocator::new(root.into()))
     }
 
+    /// Wrap an already-resolved locator.
     pub fn from_locator(locator: ProjectLocator) -> Self {
         Self {
             locator,
@@ -67,6 +77,7 @@ impl ConfigTest {
         }
     }
 
+    /// Directory that contains `Kconfig`.
     pub fn root(&self) -> &Path {
         self.locator.root()
     }
@@ -74,8 +85,12 @@ impl ConfigTest {
     /// Evaluate an assignment file. Relative paths are resolved from the
     /// project root, then from `configs/`.
     ///
-    /// Returns [`Error::Validation`] for an illegal defconfig so tests can
-    /// take the error path without failing the crate build.
+    /// # Errors
+    ///
+    /// - [`Error::Usage`] if the file cannot be found.
+    /// - [`Error::Io`] / [`Error::Parse`] / [`Error::Domain`] while loading.
+    /// - [`Error::Validation`] if the defconfig is illegal. Tests should match
+    ///   this variant to take the error path without failing the crate build.
     pub fn evaluate(&self, defconfig: impl AsRef<Path>) -> Result<EvaluatedConfig, Error> {
         let path = self.locator.named_defconfig(defconfig.as_ref())?;
         let assignments = self.defconfig.load(&path, self.limits)?;
@@ -83,6 +98,11 @@ impl ConfigTest {
     }
 
     /// Evaluate assignment text in the same format as a `*_defconfig` file.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] for a malformed line; [`Error::Validation`] if the
+    /// assignments are illegal against the project's `Kconfig`.
     pub fn evaluate_text(&self, text: &str) -> Result<EvaluatedConfig, Error> {
         let assignments = self.defconfig.parse_text(text, self.limits)?;
         self.evaluate_assignments(&assignments)

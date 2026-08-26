@@ -39,6 +39,15 @@ impl KconfigLoader {
     }
 
     /// Parse `root_kconfig` with `nom-kconfig` and convert the AST into a symbol table.
+    ///
+    /// `source` entries are followed; the filesystem is never crawled for
+    /// `Kconfig*` names.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::Io`] / [`crate::domain::DomainError::FileTooLarge`] on read.
+    /// - [`Error::Parse`] if the file is not valid Kconfig or has trailing text.
+    /// - [`Error::Domain`] on symbol-table limits or conflicting types.
     pub fn load(
         &self,
         root_dir: &Path,
@@ -98,8 +107,11 @@ impl Default for KconfigLoader {
 
 /// Parse `root_kconfig` with `nom-kconfig` and convert the AST into a symbol table.
 ///
-/// `source` entries are followed by the parser (and then walked here). The
-/// filesystem is never crawled for `Kconfig*` names.
+/// Alias for [`KconfigLoader::load`].
+///
+/// # Errors
+///
+/// Same as [`KconfigLoader::load`].
 pub fn load_kconfig(
     root_dir: &Path,
     kconfig: &Path,

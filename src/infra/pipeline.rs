@@ -11,6 +11,8 @@ use crate::infra::kconfig::{KconfigLoader, LoadedKconfig};
 use std::path::{Path, PathBuf};
 
 /// Inputs for a full load → evaluate → generate run.
+///
+/// `root_dir` is the directory used to resolve `source` paths.
 #[derive(Debug, Clone)]
 pub struct GenerateRequest {
     pub root_dir: PathBuf,
@@ -19,7 +21,7 @@ pub struct GenerateRequest {
     pub limits: Limits,
 }
 
-/// Successful pipeline output.
+/// Successful pipeline output: evaluated values plus generated artefacts.
 #[derive(Debug, Clone)]
 pub struct GenerateResult {
     pub evaluated: EvaluatedConfig,
@@ -28,6 +30,7 @@ pub struct GenerateResult {
 }
 
 impl GenerateRequest {
+    /// Build a request with [`Limits::default`].
     pub fn new(root_dir: PathBuf, kconfig: PathBuf, defconfig: PathBuf) -> Self {
         Self {
             root_dir,
@@ -39,6 +42,8 @@ impl GenerateRequest {
 }
 
 /// Orchestrates Kconfig load, assignment load, evaluation, and code generation.
+///
+/// This is the library entry after [`crate::ProjectLocator`] has resolved paths.
 pub struct Pipeline {
     kconfig: KconfigLoader,
     defconfig: DefconfigLoader,
@@ -46,6 +51,7 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
+    /// Create a pipeline with default loaders and generator.
     pub fn new() -> Self {
         Self {
             kconfig: KconfigLoader::new(),
@@ -55,6 +61,12 @@ impl Pipeline {
     }
 
     /// Parse definitions and assignments, evaluate, and generate artefacts.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::Io`] / [`Error::Parse`] / [`Error::Domain`] while loading
+    ///   Kconfig or the defconfig.
+    /// - [`Error::Validation`] if evaluation is incoherent.
     pub fn run(&self, request: &GenerateRequest) -> Result<GenerateResult, Error> {
         let LoadedKconfig {
             table,
@@ -75,6 +87,10 @@ impl Pipeline {
     }
 
     /// Load `Kconfig` and evaluate `assignments` without writing artefacts.
+    ///
+    /// # Errors
+    ///
+    /// Same load failures as [`Pipeline::run`], then [`Error::Validation`].
     pub fn evaluate(
         &self,
         root_dir: &Path,
@@ -99,10 +115,16 @@ impl Default for Pipeline {
 pub struct ArtifactWriter;
 
 impl ArtifactWriter {
+    /// Create a writer. The type is stateless.
     pub fn new() -> Self {
         Self
     }
 
+    /// Write `config.rs` and `.config` next to `config_rs` / `dotconfig`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] if a parent directory cannot be created or a write fails.
     pub fn write(
         &self,
         result: &GenerateResult,
@@ -130,10 +152,23 @@ impl Default for ArtifactWriter {
 }
 
 /// Parse definitions and assignments, evaluate, and generate artefacts.
+///
+/// Alias for [`Pipeline::run`].
+///
+/// # Errors
+///
+/// Same as [`Pipeline::run`].
 pub fn run(request: &GenerateRequest) -> Result<GenerateResult, Error> {
     Pipeline::new().run(request)
 }
 
+/// Write `config.rs` and `.config`.
+///
+/// Alias for [`ArtifactWriter::write`].
+///
+/// # Errors
+///
+/// Same as [`ArtifactWriter::write`].
 pub fn write_outputs(
     result: &GenerateResult,
     config_rs: &Path,

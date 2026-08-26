@@ -12,12 +12,17 @@ use crate::{telemetry_error, telemetry_info};
 use std::path::PathBuf;
 
 /// Runs kconfig generation from a crate `build.rs`.
+///
+/// Prefer `cargo_kcfg_macros::include_config!` when the crate only needs
+/// `CONFIG_*` constants. Use this type when the crate itself must emit
+/// `cargo:rustc-cfg` for `#[cfg(CONFIG_*)]`.
 pub struct BuildScript {
     pipeline: Pipeline,
     writer: ArtifactWriter,
 }
 
 impl BuildScript {
+    /// Create a build-script runner with default pipeline and writer.
     pub fn new() -> Self {
         Self {
             pipeline: Pipeline::new(),
@@ -26,8 +31,17 @@ impl BuildScript {
     }
 
     /// Discover files, evaluate, write `OUT_DIR` artefacts, and emit `cargo:` lines.
+    ///
+    /// Installs [`Telemetry`] with the prefix `cargo-kcfg`. Failures are
+    /// logged with [`telemetry_error!`] and then returned.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::Usage`] if `CARGO_MANIFEST_DIR` / `OUT_DIR` is unset, telemetry
+    ///   cannot be installed, or files cannot be discovered.
+    /// - [`Error::Validation`] / [`Error::Parse`] / [`Error::Io`] from the pipeline.
     pub fn run(&self) -> Result<(), Error> {
-        let _telemetry = Telemetry::new("cargo-kconfig").map_err(|err| {
+        let _telemetry = Telemetry::new("cargo-kcfg").map_err(|err| {
             Error::Usage(format!(
                 "telemetry init failed: {err}. The kconfig build script cannot continue"
             ))
@@ -105,6 +119,10 @@ impl Default for BuildScript {
 /// walking up from `CARGO_MANIFEST_DIR` to a workspace root when this package
 /// has no `Kconfig`. Writes `config.rs` / `.config` into `OUT_DIR`, and prints
 /// `cargo:rustc-cfg` lines. Errors are reported through telemetry and returned.
+///
+/// # Errors
+///
+/// Same as [`BuildScript::run`].
 pub fn run_build_script() -> Result<(), Error> {
     BuildScript::new().run()
 }

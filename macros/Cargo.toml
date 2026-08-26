@@ -1,15 +1,18 @@
 [package]
-name = "cargo-kconfig-macros"
+name = "cargo-kcfg-macros"
 version = "0.0.1"
 edition = "2024"
 license = "MIT"
-description = "Proc-macro include for cargo-kconfig generated CONFIG_* constants"
-publish = false
+description = "Proc-macro include for cargo-kcfg generated CONFIG_* constants"
+readme = "README.md"
+documentation = "https://docs.rs/cargo-kcfg-macros"
+keywords = ["kconfig", "cargo", "embedded", "configuration"]
+categories = ["development-tools::procedural-macro-helpers"]
 
 [lib]
 proc-macro = true
 
 [dependencies]
-cargo-kconfig = { path = "..", version = "0.0.1", default-features = false }
+cargo-kcfg = { path = "..", version = "0.0.1", default-features = false }
 proc-macro2 = "1"
 quote = "1"

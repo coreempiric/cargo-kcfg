@@ -3,14 +3,14 @@
 //! # How to use
 //!
 //! Construct once in `main` with a message prefix and keep the value alive
-//! for the process. Every [`telemetry_info!`] / [`telemetry_error!`] call
+//! for the process. Every [`crate::telemetry_info`] / [`crate::telemetry_error`] call
 //! then prepends that prefix to the log message:
 //!
 //! ```
-//! use cargo_kconfig::{telemetry_error, telemetry_info, Telemetry, TelemetryError};
+//! use cargo_kcfg::{telemetry_error, telemetry_info, Telemetry, TelemetryError};
 //!
 //! # fn main() -> Result<(), TelemetryError> {
-//! let _telemetry = Telemetry::new("cargo-kconfig")?;
+//! let _telemetry = Telemetry::new("cargo-kcfg")?;
 //! telemetry_info!("telemetry ready");
 //! telemetry_error!(code = 1u32, "failure");
 //! # Ok(())
@@ -60,6 +60,12 @@ impl Telemetry {
     /// `prefix` is prepended to every subsequent [`crate::telemetry_info`] and
     /// [`crate::telemetry_error`] message (`"{prefix}: {message}"`). An empty
     /// prefix leaves messages unchanged.
+    ///
+    /// # Errors
+    ///
+    /// [`TelemetryError::InitFailed`] if a tracing subscriber is already
+    /// installed in this process (including a second call to [`Self::new`]).
+    /// The first prefix is kept.
     pub fn new(prefix: impl Into<String>) -> Result<Self, TelemetryError> {
         let prefix = prefix.into();
         let display = if prefix.is_empty() {
@@ -102,7 +108,7 @@ pub fn prefix_display() -> &'static str {
     PREFIX_DISPLAY.get().map(String::as_str).unwrap_or("")
 }
 
-/// Logs an INFO event through the global tracing subscriber.
+/// Log an INFO event, prefixed with the string passed to [`Telemetry::new`].
 #[macro_export]
 macro_rules! telemetry_info {
     (@emit [$($fields:tt)*] $fmt:literal $($rest:tt)*) => {
@@ -130,7 +136,7 @@ macro_rules! telemetry_info {
     };
 }
 
-/// Logs an ERROR event through the global tracing subscriber.
+/// Log an ERROR event, prefixed with the string passed to [`Telemetry::new`].
 #[macro_export]
 macro_rules! telemetry_error {
     (@emit [$($fields:tt)*] $fmt:literal $($rest:tt)*) => {
@@ -164,20 +170,20 @@ mod tests {
 
     #[test]
     fn telemetry_init_succeeds_once() {
-        let first = Telemetry::new("cargo-kconfig");
+        let first = Telemetry::new("cargo-kcfg");
         telemetry_info!("Test info message.");
         telemetry_error!("Test error message.");
         telemetry_info!(code = 7u32, "field plus message");
 
         assert!(first.is_ok(), "telemetry init should succeed");
-        assert_eq!(Telemetry::prefix(), "cargo-kconfig");
-        assert_eq!(prefix_display(), "cargo-kconfig: ");
+        assert_eq!(Telemetry::prefix(), "cargo-kcfg");
+        assert_eq!(prefix_display(), "cargo-kcfg: ");
 
         let second = Telemetry::new("other");
         assert_eq!(second.unwrap_err(), TelemetryError::InitFailed);
         assert_eq!(
             Telemetry::prefix(),
-            "cargo-kconfig",
+            "cargo-kcfg",
             "the first prefix must stick"
         );
     }
@@ -186,8 +192,8 @@ mod tests {
     fn empty_prefix_adds_no_separator() {
         assert_eq!(format!(concat!("{}", "hello"), ""), "hello");
         assert_eq!(
-            format!(concat!("{}", "hello"), "cargo-kconfig: "),
-            "cargo-kconfig: hello"
+            format!(concat!("{}", "hello"), "cargo-kcfg: "),
+            "cargo-kcfg: hello"
         );
     }
 

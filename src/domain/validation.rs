@@ -3,14 +3,23 @@ use std::fmt;
 /// Classification of a validation finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IssueKind {
+    /// Assignment names a symbol that is not in the Kconfig table.
     UnknownSymbol,
+    /// The raw value cannot be parsed as the symbol's type.
     TypeMismatch,
+    /// An `int`/`hex` value is outside its `range`.
     OutOfRange,
+    /// A symbol is enabled while `depends on` is unmet.
     UnmetDependency,
+    /// A `config` entry has no type.
     MissingType,
+    /// A resource or iteration limit was exceeded.
     LimitExceeded,
+    /// Evaluation hit a domain error that is reported as a validation issue.
     ParseError,
+    /// Direct `depends on` graph contains a cycle.
     CyclicDependency,
+    /// A `choice` has two members `y`, or none when it is not `optional`.
     ChoiceConflict,
 }
 

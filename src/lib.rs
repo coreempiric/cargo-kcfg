@@ -1,18 +1,4 @@
-//! cargo-kconfig: Linux/Zephyr-style Kconfig for Rust crates.
-//!
-//! # Navigation
-//!
-//! Binary: [`cli::Cli::run`] → [`cli::Cli::execute`] → [`cli::Commands::execute`]
-//! → [`cli::CheckCommand`] / [`cli::BuildCommand`] / [`cli::TestCommand`]
-//! → [`infra::locator::ProjectLocator`] → [`infra::pipeline::Pipeline`].
-//!
-//! Constants: `cargo_kconfig_macros::include_config!` (no consumer `build.rs`).
-//! Optional `build.rs`: [`BuildScript`] when this crate needs `#[cfg(CONFIG_*)]`.
-//! Unit tests: [`ConfigTest`].
-//!
-//! The domain layer (`domain`) is independent of the filesystem and of Cargo.
-//! Infrastructure (`infra`) loads Kconfig/`*_defconfig` files, evaluates them,
-//! and generates `.config`, `config.rs`, and `rustc-cfg` flags.
+#![doc = include_str!("../README.md")]
 
 pub mod cli;
 pub mod domain;

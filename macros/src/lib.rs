@@ -1,25 +1,26 @@
-//! Compile-time Kconfig include. Replaces a consumer `build.rs`.
-//!
-//! ```ignore
-//! pub mod config {
-//!     cargo_kconfig_macros::include_config!();
-//! }
-//! ```
-//!
-//! A virtual workspace root cannot host a `build.rs` (Cargo never runs it).
-//! This macro runs while compiling the member crate, locates `Kconfig` the
-//! same way [`cargo_kconfig::BuildScript`] does, and expands the `CONFIG_*`
-//! constants in place. It cannot emit `cargo:rustc-cfg`; use `if CONFIG_FOO`
-//! (or keep an optional `build.rs` that calls `run_build_script` if you need
-//! `#[cfg(CONFIG_FOO)]`).
+#![doc = include_str!("../README.md")]
 
-use cargo_kconfig::{Pipeline, ProjectLocator};
+use cargo_kcfg::{Pipeline, ProjectLocator};
 use proc_macro::TokenStream;
 use quote::quote;
 use std::env;
 use std::path::{Path, PathBuf};
 
 /// Expand the evaluated `config.rs` into the calling module.
+///
+/// Takes no arguments. Discovers `Kconfig` from `CARGO_MANIFEST_DIR` (walking
+/// up to a workspace root) and the unique `*_defconfig` or `KCONFIG_DEFCONFIG`.
+///
+/// # Errors
+///
+/// Expansion becomes `compile_error!` when:
+///
+/// - the macro is invoked with arguments
+/// - `CARGO_MANIFEST_DIR` is unset
+/// - `Kconfig` or a unique defconfig cannot be found
+/// - the definition file cannot be parsed
+/// - evaluation is incoherent (unmet `depends on`, bad `select`, and so on)
+/// - generated Rust is not valid tokens
 #[proc_macro]
 pub fn include_config(input: TokenStream) -> TokenStream {
     if !input.is_empty() {

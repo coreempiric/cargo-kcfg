@@ -35,7 +35,7 @@ use std::process::Command;
 
 /// Cargo subcommand that evaluates Kconfig definitions and generates Rust constants.
 #[derive(Debug, Parser)]
-#[command(name = "cargo-kconfig", version, about)]
+#[command(name = "cargo-kcfg", version, about)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -65,14 +65,14 @@ pub struct ProjectArgs {
     pub defconfig: Option<PathBuf>,
 }
 
-/// `cargo kconfig check` — validate without writing artefacts.
+/// `cargo kcfg check` — validate without writing artefacts.
 #[derive(Debug, Clone, clap::Args)]
 pub struct CheckCommand {
     #[command(flatten)]
     pub io: ProjectArgs,
 }
 
-/// `cargo kconfig build` — validate and write `.config` / `config.rs`.
+/// `cargo kcfg build` — validate and write `.config` / `config.rs`.
 #[derive(Debug, Clone, clap::Args)]
 pub struct BuildCommand {
     #[command(flatten)]
@@ -91,7 +91,7 @@ pub struct BuildCommand {
     pub emit_rustc_cfg: bool,
 }
 
-/// `cargo kconfig test` — build artefacts and type-check the generated constants.
+/// `cargo kcfg test` — build artefacts and type-check the generated constants.
 #[derive(Debug, Clone, clap::Args)]
 pub struct TestCommand {
     #[command(flatten)]
@@ -99,31 +99,50 @@ pub struct TestCommand {
 }
 
 impl Cli {
-    /// Parse argv and run the selected command.
+    /// Parse process argv and run the selected command.
+    ///
+    /// # Errors
+    ///
+    /// [`Error`] from discovery, the pipeline, artefact writes, or (for
+    /// `test`) invoking `rustc`.
     pub fn run() -> Result<(), Error> {
         Self::from_args(std::env::args_os()).execute()
     }
 
-    /// Strip the extra `kconfig` token Cargo inserts, then parse into [`Cli`].
+    /// Strip the extra `kcfg` token Cargo inserts, then parse into [`Cli`].
+    ///
+    /// # Panics
+    ///
+    /// Clap terminates the process on `--help`, `--version`, or invalid argv.
     pub fn from_args<I, T>(args: I) -> Self
     where
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone,
     {
         let mut args: Vec<std::ffi::OsString> = args.into_iter().map(Into::into).collect();
-        if args.get(1).and_then(|a| a.to_str()) == Some("kconfig") {
+        if args.get(1).and_then(|a| a.to_str()) == Some("kcfg") {
             args.remove(1);
         }
         Self::parse_from(args)
     }
 
     /// Dispatch to the selected [`Commands`] variant.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`CheckCommand::execute`], [`BuildCommand::execute`], or
+    /// [`TestCommand::execute`].
     pub fn execute(self) -> Result<(), Error> {
         self.command.execute()
     }
 }
 
 impl Commands {
+    /// Run the matched command.
+    ///
+    /// # Errors
+    ///
+    /// Same as the inner command's `execute`.
     pub fn execute(self) -> Result<(), Error> {
         match self {
             Self::Check(command) => command.execute(),
@@ -155,13 +174,19 @@ impl ProjectArgs {
 }
 
 impl CheckCommand {
+    /// Validate without writing artefacts.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] if files cannot be discovered; pipeline errors from
+    /// [`crate::Pipeline::run`].
     pub fn execute(self) -> Result<(), Error> {
         let request = self.io.request()?;
         let result = Pipeline::new().run(&request)?;
         telemetry_info!(
             symbols = result.evaluated.table.len(),
             kconfig = %request.kconfig.display(),
-            "kconfig: ok ({} symbols from {})",
+            "kcfg: ok ({} symbols from {})",
             result.evaluated.table.len(),
             request.kconfig.display()
         );
@@ -170,6 +195,11 @@ impl CheckCommand {
 }
 
 impl BuildCommand {
+    /// Validate and write `.config` / `config.rs`.
+    ///
+    /// # Errors
+    ///
+    /// Pipeline errors, plus [`Error::Io`] if artefacts cannot be written.
     pub fn execute(self) -> Result<(), Error> {
         let _result = self.generate_and_write()?;
         Ok(())
@@ -195,7 +225,7 @@ impl BuildCommand {
             symbols = result.evaluated.table.len(),
             config_rs = %config_rs.display(),
             dotconfig = %dotconfig.display(),
-            "kconfig: wrote {} and {} ({} symbols)",
+            "kcfg: wrote {} and {} ({} symbols)",
             config_rs.display(),
             dotconfig.display(),
             result.evaluated.table.len()
@@ -208,15 +238,21 @@ impl BuildCommand {
 }
 
 impl TestCommand {
+    /// Build artefacts and type-check generated `config.rs` with `rustc`.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`BuildCommand::execute`], plus [`Error::Usage`] if `rustc` is
+    /// missing or the generated file does not compile.
     pub fn execute(self) -> Result<(), Error> {
         let result = self.build.generate_and_write()?;
         GeneratedSourceChecker::new().typecheck(&result.generated.config_rs)?;
-        telemetry_info!("kconfig: generated constants type-checked");
+        telemetry_info!("kcfg: generated constants type-checked");
         Ok(())
     }
 }
 
-/// Compiles generated `config.rs` with `rustc` so `cargo kconfig test` catches type errors.
+/// Compiles generated `config.rs` with `rustc` so `cargo kcfg test` catches type errors.
 pub struct GeneratedSourceChecker;
 
 impl GeneratedSourceChecker {
@@ -224,6 +260,12 @@ impl GeneratedSourceChecker {
         Self
     }
 
+    /// Compile `config_rs` as a tiny binary with `rustc`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] writing a temp file; [`Error::Usage`] if `rustc` cannot
+    /// be invoked or reports a compile error.
     pub fn typecheck(&self, config_rs: &str) -> Result<(), Error> {
         let dir = self.temp_dir()?;
         let rs_path = dir.join("kconfig_check.rs");
@@ -257,7 +299,7 @@ impl GeneratedSourceChecker {
     }
 
     fn temp_dir(&self) -> Result<PathBuf, Error> {
-        let dir = std::env::temp_dir().join(format!("cargo-kconfig-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("cargo-kcfg-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
         Ok(dir)
     }

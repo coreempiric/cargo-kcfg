@@ -2,6 +2,9 @@ use super::limits::Limits;
 use thiserror::Error;
 
 /// Recoverable domain failures. Library code returns these instead of panicking.
+///
+/// Wrapped as [`crate::Error::Domain`] at the crate boundary. Evaluation of an
+/// incoherent configuration uses [`crate::ValidationReport`] instead.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum DomainError {
     #[error(

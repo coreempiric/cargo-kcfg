@@ -2,13 +2,20 @@
 //!
 //! Copyright (c) 2026 CoreEmpiric
 //!
-//! Binary entry. The rest of the program is [`cargo_kconfig::cli::Cli::run`].
+//! Binary entry. Installs [`Telemetry`](cargo_kcfg::Telemetry) then runs
+//! [`cargo_kcfg::cli::Cli::run`].
+//!
+//! # Panics
+//!
+//! Panics only if telemetry cannot be installed. Every other failure is
+//! logged with [`telemetry_error!`](cargo_kcfg::telemetry_error) and
+//! `process::exit(1)`.
 
-use cargo_kconfig::cli::Cli;
-use cargo_kconfig::{Telemetry, telemetry_error, telemetry_info};
+use cargo_kcfg::cli::Cli;
+use cargo_kcfg::{Telemetry, telemetry_error, telemetry_info};
 
 fn main() {
-    match Telemetry::new("cargo-kconfig") {
+    match Telemetry::new("cargo-kcfg") {
         Ok(_telemetry) => {
             telemetry_info!("telemetry initialised");
             match Cli::run() {
@@ -22,7 +29,7 @@ fn main() {
             }
         }
         Err(err) => {
-            panic!("cargo-kconfig: telemetry init failed: {err}");
+            panic!("cargo-kcfg: telemetry init failed: {err}");
         }
     }
 }

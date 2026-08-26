@@ -19,12 +19,17 @@ use std::path::{Path, PathBuf};
 const MAX_PARENT_WALK: usize = 64;
 
 /// Resolves the Kconfig root and the unique assignment file for a project.
+///
+/// Does not crawl the tree for `Kconfig*` names; `source` following is done
+/// later by [`crate::infra::kconfig::KconfigLoader`].
 #[derive(Debug)]
 pub struct ProjectLocator {
     root: PathBuf,
 }
 
 impl ProjectLocator {
+    /// Use `root` as the project directory (must already contain `Kconfig`
+    /// when [`Self::kconfig`] is called without an explicit path).
     pub fn new(root: PathBuf) -> Self {
         Self { root }
     }
@@ -32,9 +37,14 @@ impl ProjectLocator {
     /// Find the Kconfig project root starting at `start`.
     ///
     /// Order:
-    /// 1. `start` itself, if it contains `Kconfig` (package-local definitions win).
-    /// 2. `CARGO_WORKSPACE_DIR`, when that directory contains `Kconfig`.
-    /// 3. Parent directories that contain both `Cargo.toml` and `Kconfig`.
+    /// 1. `CARGO_WORKSPACE_DIR`, when that directory contains `Kconfig`.
+    /// 2. Walk parents for a `[workspace]` `Cargo.toml` (or `Cargo.lock` + `Kconfig`).
+    /// 3. `start` itself, if it contains `Kconfig`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] if no Kconfig / workspace layout can be found, or a
+    /// parent walk hits a directory without `Cargo.toml`.
     pub fn discover(start: impl Into<PathBuf>) -> Result<Self, Error> {
         let workspace_dir = std::env::var_os("CARGO_WORKSPACE_DIR").map(PathBuf::from);
         Self::discover_from(start.into(), workspace_dir)
@@ -99,6 +109,10 @@ impl ProjectLocator {
     }
 
     /// Build a [`GenerateRequest`] from optional explicit paths.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] if `Kconfig` or the assignment file cannot be resolved.
     pub fn resolve(
         &self,
         kconfig: Option<&Path>,
@@ -112,6 +126,10 @@ impl ProjectLocator {
     }
 
     /// Resolve the root Kconfig file.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] if the path does not exist.
     pub fn kconfig(&self, explicit: Option<&Path>) -> Result<PathBuf, Error> {
         let kconfig = match explicit {
             Some(path) => {
@@ -134,6 +152,11 @@ impl ProjectLocator {
     }
 
     /// Resolve the assignment file: explicit path, `KCONFIG_DEFCONFIG`, or a unique match.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] if the file is missing, or more than one `*_defconfig`
+    /// is found in the root and `configs/`.
     pub fn defconfig(&self, explicit: Option<&Path>) -> Result<PathBuf, Error> {
         if let Some(path) = explicit {
             return self.named_defconfig(path);
@@ -155,6 +178,10 @@ impl ProjectLocator {
     /// Tries `root/<path>`, then `root/configs/<filename>` when `path` is not
     /// absolute. Unit tests use this to feed a known-good or known-bad
     /// defconfig that is not the unique product file.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] if none of the candidate paths exist.
     pub fn named_defconfig(&self, given: &Path) -> Result<PathBuf, Error> {
         let mut candidates = Vec::new();
         if given.is_absolute() {
@@ -182,6 +209,14 @@ impl ProjectLocator {
     }
 
     /// Find `defconfig` or exactly one `*_defconfig` in `root` and `root/configs`.
+    ///
+    /// Nested directories such as `configs/cases/` are ignored so test-only
+    /// assignment files are not treated as product files.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] if zero or more than one match is found.
+    /// [`Error::Io`] if `root` or `configs/` cannot be read.
     pub fn unique_defconfig(&self) -> Result<PathBuf, Error> {
         let direct = self.root.join("defconfig");
         if direct.is_file() {
@@ -244,16 +279,28 @@ impl ProjectLocator {
 }
 
 /// Resolve the root Kconfig file.
+///
+/// # Errors
+///
+/// Same as [`ProjectLocator::kconfig`].
 pub fn resolve_kconfig(root: &Path, explicit: Option<&Path>) -> Result<PathBuf, Error> {
     ProjectLocator::new(root.to_path_buf()).kconfig(explicit)
 }
 
 /// Resolve the assignment file: explicit path, `KCONFIG_DEFCONFIG`, or a unique match.
+///
+/// # Errors
+///
+/// Same as [`ProjectLocator::defconfig`].
 pub fn resolve_defconfig(root: &Path, explicit: Option<&Path>) -> Result<PathBuf, Error> {
     ProjectLocator::new(root.to_path_buf()).defconfig(explicit)
 }
 
 /// Find `defconfig` or exactly one `*_defconfig` in `root` and `root/configs`.
+///
+/// # Errors
+///
+/// Same as [`ProjectLocator::unique_defconfig`].
 pub fn find_unique_defconfig(root: &Path) -> Result<PathBuf, Error> {
     ProjectLocator::new(root.to_path_buf()).unique_defconfig()
 }

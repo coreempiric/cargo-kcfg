@@ -33,6 +33,12 @@ impl AssignmentSet {
         self.assignments.is_empty()
     }
 
+    /// Insert `assignment`, replacing an earlier assignment of the same name.
+    ///
+    /// # Errors
+    ///
+    /// [`DomainError::StringValueTooLong`] if `raw` exceeds
+    /// [`Limits::max_string_value_len`].
     pub fn push(&mut self, assignment: Assignment, limits: Limits) -> Result<(), DomainError> {
         if assignment.raw.len() > limits.max_string_value_len {
             return Err(DomainError::string_value_too_long(&assignment.name, limits));

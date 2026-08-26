@@ -1,4 +1,6 @@
 /// Resource limits applied at system boundaries and during evaluation.
+///
+/// Exceeding a limit is a [`crate::domain::DomainError`], never unbounded growth.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
     pub max_symbol_name_len: usize,

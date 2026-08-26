@@ -17,6 +17,8 @@ use super::value::{Value, parse_number};
 use std::collections::{HashMap, HashSet};
 
 /// Fully evaluated configuration: every symbol has a concrete value.
+///
+/// Produced by [`Evaluator::evaluate`] when there are no validation errors.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvaluatedConfig {
     pub table: SymbolTable,
@@ -53,19 +55,25 @@ pub struct EvaluationContext<'a> {
 /// as a reverse lower bound; `imply` does the same unless the user set the
 /// target or the target's own dependencies are unmet.
 ///
-/// Returns the configuration when there are no validation errors. Errors
-/// (including `select` of a target whose `depends on` is unmet) are returned
-/// as a [`ValidationReport`]. Non-fatal warnings, if any, travel with the
-/// successful [`EvaluatedConfig`].
+/// This type is filesystem-free. File loading lives in [`crate::Pipeline`].
 pub struct Evaluator {
     limits: Limits,
 }
 
 impl Evaluator {
+    /// Create an evaluator that applies `limits` during resolution.
     pub fn new(limits: Limits) -> Self {
         Self { limits }
     }
 
+    /// Evaluate `assignments` against `table`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ValidationReport`] when the configuration is incoherent:
+    /// unknown symbols, type mismatches, out-of-range integers, unmet
+    /// `depends on` (user assignment or `select`), illegal `select`/`imply`
+    /// targets, `choice` violations, or a dependency cycle.
     pub fn evaluate(
         &self,
         table: SymbolTable,
@@ -170,6 +178,12 @@ impl Evaluator {
 }
 
 /// Evaluate assignments against the symbol table.
+///
+/// Convenience wrapper around [`Evaluator::evaluate`].
+///
+/// # Errors
+///
+/// Same as [`Evaluator::evaluate`].
 pub fn evaluate(
     table: SymbolTable,
     assignments: &AssignmentSet,

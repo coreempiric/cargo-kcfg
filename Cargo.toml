@@ -1,10 +1,11 @@
 [package]
-name = "cargo-kconfig"
+name = "cargo-kcfg"
 version = "0.0.1"
 edition = "2024"
 license = "MIT"
 description = "Cargo subcommand bringing Linux/Zephyr-style Kconfig support to Rust projects"
 readme = "README.md"
+documentation = "https://docs.rs/cargo-kcfg"
 keywords = ["kconfig", "cargo", "embedded", "configuration"]
 categories = ["command-line-utilities", "development-tools::cargo-plugins"]
 
@@ -22,11 +23,11 @@ exclude = [
 resolver = "2"
 
 [lib]
-name = "cargo_kconfig"
+name = "cargo_kcfg"
 path = "src/lib.rs"
 
 [[bin]]
-name = "cargo-kconfig"
+name = "cargo-kcfg"
 path = "src/main.rs"
 
 [dependencies]

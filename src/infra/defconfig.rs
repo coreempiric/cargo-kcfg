@@ -16,12 +16,22 @@ impl DefconfigLoader {
     }
 
     /// Load a Linux-style `*_defconfig` or `.config` assignment file.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] if the file cannot be read; [`Error::Usage`] for a
+    /// malformed line; [`Error::Domain`] if a string value exceeds [`Limits`].
     pub fn load(&self, path: &Path, limits: Limits) -> Result<AssignmentSet, Error> {
         check_file_size(path, limits)?;
         let text = fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
         self.parse_text(&text, limits)
     }
 
+    /// Parse assignment text without touching the filesystem.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::load`] except [`Error::Io`].
     pub fn parse_text(&self, text: &str, limits: Limits) -> Result<AssignmentSet, Error> {
         let mut set = AssignmentSet::new();
         for (idx, line) in text.lines().enumerate() {
@@ -102,10 +112,23 @@ impl Default for DefconfigLoader {
 }
 
 /// Load a Linux-style `*_defconfig` or `.config` assignment file.
+///
+/// Alias for [`DefconfigLoader::load`].
+///
+/// # Errors
+///
+/// Same as [`DefconfigLoader::load`].
 pub fn load_defconfig(path: &Path, limits: Limits) -> Result<AssignmentSet, Error> {
     DefconfigLoader::new().load(path, limits)
 }
 
+/// Parse assignment text without a file.
+///
+/// Alias for [`DefconfigLoader::parse_text`].
+///
+/// # Errors
+///
+/// Same as [`DefconfigLoader::parse_text`].
 pub fn parse_defconfig_text(text: &str, limits: Limits) -> Result<AssignmentSet, Error> {
     DefconfigLoader::new().parse_text(text, limits)
 }
