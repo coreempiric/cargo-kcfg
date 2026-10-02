@@ -79,15 +79,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cargo-kcfg-macros"
-version = "0.0.1"
-dependencies = [
- "cargo-kcfg",
- "proc-macro2",
- "quote",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -161,7 +152,7 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 name = "kconfig-example-errors"
 version = "0.0.1"
 dependencies = [
- "cargo-kcfg-macros",
+ "cargo-kcfg",
 ]
 
 [[package]]

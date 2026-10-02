@@ -1,8 +1,7 @@
 //! Cargo `build.rs` entry — the same locator → pipeline → writer path as the CLI.
 //!
-//! Optional. Prefer `include_config!` so member crates do not need a `build.rs`.
-//! Use this helper only when the crate itself needs `cargo:rustc-cfg` for
-//! `#[cfg(CONFIG_*)]`.
+//! Required for [`crate::include_config!`]. The helper writes `OUT_DIR/config.rs`
+//! and emits `cargo:rustc-cfg` for `#[cfg(CONFIG_*)]`.
 
 use crate::error::Error;
 use crate::infra::locator::ProjectLocator;
@@ -13,8 +12,7 @@ use std::path::PathBuf;
 
 /// Runs kconfig generation from a crate `build.rs`.
 ///
-/// Prefer `cargo_kcfg_macros::include_config!` when the crate only needs
-/// `CONFIG_*` constants. Use this type when the crate itself must emit
+/// Writes `OUT_DIR/config.rs` for [`crate::include_config!`] and emits
 /// `cargo:rustc-cfg` for `#[cfg(CONFIG_*)]`.
 pub struct BuildScript {
     pipeline: Pipeline,
