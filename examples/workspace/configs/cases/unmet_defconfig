@@ -1,0 +1,2 @@
+# Illegal: UART requires BUS. Used only from unit tests via ConfigTest.
+CONFIG_UART=y

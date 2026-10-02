@@ -1,0 +1,68 @@
+mainmenu "Rejection examples for depends / select / imply / if / choice / range"
+
+# Shared bus used by several of the illegal defconfigs.
+config BUS
+	bool "Peripheral bus"
+	default n
+
+# --- depends on ---
+# Illegal: depends_unmet_defconfig sets UART=y while BUS=n.
+config UART
+	bool "UART driver"
+	depends on BUS
+	default n
+
+# --- if ---
+# Symbols inside `if UART` inherit that condition as a dependency.
+# Illegal: if_unmet_defconfig sets UART_IRQ=y while UART is off.
+if UART
+config UART_IRQ
+	bool "UART interrupt"
+	default n
+endif
+
+# --- select ---
+# `select` turns HAS_DMA on when DMA_DRIVER is enabled, but HAS_DMA still
+# requires BUS. Illegal: select_unmet_defconfig enables the driver without BUS.
+config HAS_DMA
+	bool
+	depends on BUS
+
+config DMA_DRIVER
+	bool "DMA-capable driver"
+	select HAS_DMA
+	default n
+
+# --- imply ---
+# `imply` is a weak default: it will not force HAS_RTC on when BUS is off.
+# Illegal only if the user also writes HAS_RTC=y (imply_unmet_defconfig).
+# Legal: imply_respected_defconfig enables BOARD_WANTS_RTC without BUS;
+# HAS_RTC stays n and evaluation succeeds.
+config HAS_RTC
+	bool
+	depends on BUS
+
+config BOARD_WANTS_RTC
+	bool "Board prefers an RTC"
+	imply HAS_RTC
+	default n
+
+# --- choice ---
+# Exactly one member may be y. Illegal: choice_conflict_defconfig enables two.
+choice
+	prompt "Console backend"
+	default UART_CONSOLE
+
+config UART_CONSOLE
+	bool "UART console"
+
+config RTT_CONSOLE
+	bool "RTT console"
+endchoice
+
+# --- range ---
+# Illegal: range_unmet_defconfig sets a value outside 8..=64.
+config BUF_SIZE
+	int "Buffer bytes"
+	range 8 64
+	default 16

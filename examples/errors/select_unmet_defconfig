@@ -1,0 +1,3 @@
+# Invalid `select`: DMA_DRIVER selects HAS_DMA, which requires BUS.
+CONFIG_BUS=n
+CONFIG_DMA_DRIVER=y

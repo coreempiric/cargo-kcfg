@@ -1,0 +1,26 @@
+mainmenu "Minimal cargo-kcfg example"
+
+config FOO
+	bool "Enable foo"
+	default y
+
+config BUFFER_SIZE
+	int "Buffer size"
+	range 1 4096
+	default 128
+	depends on FOO
+
+config BOARD_NAME
+	string "Board name"
+	default "qemu"
+
+config FEATURE
+	bool "Optional feature"
+	default n
+	depends on FOO
+
+config DMA_ADDR
+	hex "DMA address"
+	default 0x1000
+
+source "Kconfig.board"

@@ -1,0 +1,4 @@
+# Invalid `if`: UART_IRQ is defined inside `if UART`, so it depends on UART.
+CONFIG_BUS=n
+CONFIG_UART=n
+CONFIG_UART_IRQ=y

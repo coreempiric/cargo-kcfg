@@ -1,0 +1,8 @@
+config BUS
+	bool
+	default n
+
+config UART
+	bool
+	depends on BUS
+	default n

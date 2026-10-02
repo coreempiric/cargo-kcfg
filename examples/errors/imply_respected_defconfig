@@ -1,0 +1,3 @@
+# Legal `imply`: BOARD_WANTS_RTC is on, BUS is off, so HAS_RTC stays n.
+CONFIG_BUS=n
+CONFIG_BOARD_WANTS_RTC=y
