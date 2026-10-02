@@ -9,7 +9,7 @@
 //!   → [`codegen::CodeGenerator`]
 //!   → [`pipeline::ArtifactWriter`]
 //!
-//! Constants: `cargo_kcfg_macros::include_config!` (no consumer `build.rs`).
+//! Constants: `cargo_kconfig_macros::include_config!` (no consumer `build.rs`).
 //! Optional rustc-cfg: [`build_script::BuildScript`].
 //! Unit tests that need a good or bad defconfig enter at [`config_test::ConfigTest`].
 

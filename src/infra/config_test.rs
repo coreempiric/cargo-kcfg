@@ -1,12 +1,12 @@
 //! Evaluate known-good or known-bad assignment files from unit tests.
 //!
 //! Compile-time constants come from
-//! `pub mod config { cargo_kcfg_macros::include_config!(); }`.
+//! `pub mod config { cargo_kconfig_macros::include_config!(); }`.
 //! Tests that need to **branch** on a configuration call [`ConfigTest`]:
 //!
 //! ```rust,no_run
-//! use cargo_kcfg::domain::{IssueKind, Value};
-//! use cargo_kcfg::{ConfigTest, Error};
+//! use cargo_kconfig::domain::{IssueKind, Value};
+//! use cargo_kconfig::{ConfigTest, Error};
 //!
 //! let kconfig = ConfigTest::discover().expect("workspace Kconfig");
 //! match kconfig.evaluate("configs/cases/unmet_defconfig") {

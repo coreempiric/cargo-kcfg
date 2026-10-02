@@ -1,6 +1,6 @@
-use cargo_kcfg::Error;
-use cargo_kcfg::domain::{IssueKind, Value};
-use cargo_kcfg::{ConfigTest, GenerateRequest, Pipeline, ProjectLocator};
+use cargo_kconfig::Error;
+use cargo_kconfig::domain::{IssueKind, Value};
+use cargo_kconfig::{ConfigTest, GenerateRequest, Pipeline, ProjectLocator};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -15,8 +15,8 @@ fn request(dir: &Path, defconfig: &str) -> GenerateRequest {
 }
 
 fn expect_validation(
-    result: Result<cargo_kcfg::GenerateResult, Error>,
-) -> cargo_kcfg::ValidationReport {
+    result: Result<cargo_kconfig::GenerateResult, Error>,
+) -> cargo_kconfig::ValidationReport {
     match result {
         Err(Error::Validation(report)) => report,
         other => panic!("expected validation error, got {other:?}"),

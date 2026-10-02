@@ -62,21 +62,21 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Publish cargo-kcfg
+      - name: Publish cargo-kconfig
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p cargo-kcfg
+        run: cargo publish -p cargo-kconfig
 
-      - name: Publish cargo-kcfg-macros
+      - name: Publish cargo-kconfig-macros
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4 5 6; do
-            if cargo publish -p cargo-kcfg-macros; then
+            if cargo publish -p cargo-kconfig-macros; then
               exit 0
             fi
-            echo "crates.io may not have indexed cargo-kcfg yet (attempt ${attempt})"
+            echo "crates.io may not have indexed cargo-kconfig yet (attempt ${attempt})"
             sleep 20
           done
           exit 1

@@ -35,7 +35,7 @@ use std::process::Command;
 
 /// Cargo subcommand that evaluates Kconfig definitions and generates Rust constants.
 #[derive(Debug, Parser)]
-#[command(name = "cargo-kcfg", version, about)]
+#[command(name = "cargo-kconfig", version, about)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -65,14 +65,14 @@ pub struct ProjectArgs {
     pub defconfig: Option<PathBuf>,
 }
 
-/// `cargo kcfg check` — validate without writing artefacts.
+/// `cargo kconfig check` — validate without writing artefacts.
 #[derive(Debug, Clone, clap::Args)]
 pub struct CheckCommand {
     #[command(flatten)]
     pub io: ProjectArgs,
 }
 
-/// `cargo kcfg build` — validate and write `.config` / `config.rs`.
+/// `cargo kconfig build` — validate and write `.config` / `config.rs`.
 #[derive(Debug, Clone, clap::Args)]
 pub struct BuildCommand {
     #[command(flatten)]
@@ -91,7 +91,7 @@ pub struct BuildCommand {
     pub emit_rustc_cfg: bool,
 }
 
-/// `cargo kcfg test` — build artefacts and type-check the generated constants.
+/// `cargo kconfig test` — build artefacts and type-check the generated constants.
 #[derive(Debug, Clone, clap::Args)]
 pub struct TestCommand {
     #[command(flatten)]
@@ -109,7 +109,7 @@ impl Cli {
         Self::from_args(std::env::args_os()).execute()
     }
 
-    /// Strip the extra `kcfg` token Cargo inserts, then parse into [`Cli`].
+    /// Strip the extra `kconfig` token Cargo inserts, then parse into [`Cli`].
     ///
     /// # Panics
     ///
@@ -120,7 +120,7 @@ impl Cli {
         T: Into<std::ffi::OsString> + Clone,
     {
         let mut args: Vec<std::ffi::OsString> = args.into_iter().map(Into::into).collect();
-        if args.get(1).and_then(|a| a.to_str()) == Some("kcfg") {
+        if args.get(1).and_then(|a| a.to_str()) == Some("kconfig") {
             args.remove(1);
         }
         Self::parse_from(args)
@@ -186,7 +186,7 @@ impl CheckCommand {
         telemetry_info!(
             symbols = result.evaluated.table.len(),
             kconfig = %request.kconfig.display(),
-            "kcfg: ok ({} symbols from {})",
+            "kconfig: ok ({} symbols from {})",
             result.evaluated.table.len(),
             request.kconfig.display()
         );
@@ -225,7 +225,7 @@ impl BuildCommand {
             symbols = result.evaluated.table.len(),
             config_rs = %config_rs.display(),
             dotconfig = %dotconfig.display(),
-            "kcfg: wrote {} and {} ({} symbols)",
+            "kconfig: wrote {} and {} ({} symbols)",
             config_rs.display(),
             dotconfig.display(),
             result.evaluated.table.len()
@@ -247,12 +247,12 @@ impl TestCommand {
     pub fn execute(self) -> Result<(), Error> {
         let result = self.build.generate_and_write()?;
         GeneratedSourceChecker::new().typecheck(&result.generated.config_rs)?;
-        telemetry_info!("kcfg: generated constants type-checked");
+        telemetry_info!("kconfig: generated constants type-checked");
         Ok(())
     }
 }
 
-/// Compiles generated `config.rs` with `rustc` so `cargo kcfg test` catches type errors.
+/// Compiles generated `config.rs` with `rustc` so `cargo kconfig test` catches type errors.
 pub struct GeneratedSourceChecker;
 
 impl GeneratedSourceChecker {
@@ -299,7 +299,7 @@ impl GeneratedSourceChecker {
     }
 
     fn temp_dir(&self) -> Result<PathBuf, Error> {
-        let dir = std::env::temp_dir().join(format!("cargo-kcfg-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("cargo-kconfig-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
         Ok(dir)
     }

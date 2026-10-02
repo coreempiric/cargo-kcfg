@@ -7,10 +7,10 @@
 //! then prepends that prefix to the log message:
 //!
 //! ```
-//! use cargo_kcfg::{telemetry_error, telemetry_info, Telemetry, TelemetryError};
+//! use cargo_kconfig::{telemetry_error, telemetry_info, Telemetry, TelemetryError};
 //!
 //! # fn main() -> Result<(), TelemetryError> {
-//! let _telemetry = Telemetry::new("cargo-kcfg")?;
+//! let _telemetry = Telemetry::new("cargo-kconfig")?;
 //! telemetry_info!("telemetry ready");
 //! telemetry_error!(code = 1u32, "failure");
 //! # Ok(())
@@ -170,20 +170,20 @@ mod tests {
 
     #[test]
     fn telemetry_init_succeeds_once() {
-        let first = Telemetry::new("cargo-kcfg");
+        let first = Telemetry::new("cargo-kconfig");
         telemetry_info!("Test info message.");
         telemetry_error!("Test error message.");
         telemetry_info!(code = 7u32, "field plus message");
 
         assert!(first.is_ok(), "telemetry init should succeed");
-        assert_eq!(Telemetry::prefix(), "cargo-kcfg");
-        assert_eq!(prefix_display(), "cargo-kcfg: ");
+        assert_eq!(Telemetry::prefix(), "cargo-kconfig");
+        assert_eq!(prefix_display(), "cargo-kconfig: ");
 
         let second = Telemetry::new("other");
         assert_eq!(second.unwrap_err(), TelemetryError::InitFailed);
         assert_eq!(
             Telemetry::prefix(),
-            "cargo-kcfg",
+            "cargo-kconfig",
             "the first prefix must stick"
         );
     }
@@ -192,8 +192,8 @@ mod tests {
     fn empty_prefix_adds_no_separator() {
         assert_eq!(format!(concat!("{}", "hello"), ""), "hello");
         assert_eq!(
-            format!(concat!("{}", "hello"), "cargo-kcfg: "),
-            "cargo-kcfg: hello"
+            format!(concat!("{}", "hello"), "cargo-kconfig: "),
+            "cargo-kconfig: hello"
         );
     }
 
