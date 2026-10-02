@@ -2,6 +2,7 @@
 name = "cargo-kcfg-macros"
 version = "0.0.1"
 edition = "2024"
+authors = ["CoreEmpiric"]
 license = "MIT"
 description = "Proc-macro include for cargo-kcfg generated CONFIG_* constants"
 readme = "README.md"
