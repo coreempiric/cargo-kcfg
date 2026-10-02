@@ -15,7 +15,7 @@ is compiled for the target.
 ## Installation
 
 ```bash
-cargo install cargo-kconfig
+cargo install --path /local/path/to/this/repo
 cargo kconfig --help
 ```
 
