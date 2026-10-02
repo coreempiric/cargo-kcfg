@@ -1,4 +1,4 @@
-# cargo-deny configuration for cargo-kconfig.
+# cargo-deny configuration for cargo-kcfg.
 # Same policy shape as the CoreEmpiric website: advisories fail the audit,
 # and the license allow-list is the set this workspace actually links.
 

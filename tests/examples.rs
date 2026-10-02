@@ -1,6 +1,6 @@
-use cargo_kconfig::Error;
-use cargo_kconfig::domain::{IssueKind, Tristate, Value};
-use cargo_kconfig::{GenerateRequest, Pipeline};
+use cargo_kcfg::Error;
+use cargo_kcfg::domain::{IssueKind, Tristate, Value};
+use cargo_kcfg::{GenerateRequest, Pipeline};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -10,7 +10,7 @@ fn example_dir(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn evaluate(example: &str, defconfig: &str) -> cargo_kconfig::GenerateResult {
+fn evaluate(example: &str, defconfig: &str) -> cargo_kcfg::GenerateResult {
     let dir = example_dir(example);
     Pipeline::new()
         .run(&GenerateRequest::new(
@@ -26,7 +26,7 @@ fn expect_error(
     defconfig: &str,
     kind: IssueKind,
     needles: &[&str],
-) -> cargo_kconfig::ValidationReport {
+) -> cargo_kcfg::ValidationReport {
     let dir = example_dir(example);
     let err = match Pipeline::new().run(&GenerateRequest::new(
         dir.clone(),

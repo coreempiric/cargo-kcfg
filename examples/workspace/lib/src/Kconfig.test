@@ -1,5 +1,5 @@
 
-mainmenu "Workspace cargo-kconfig example"
+mainmenu "Workspace cargo-kcfg example"
 
 config FOO
 	bool "Enable foo feature"

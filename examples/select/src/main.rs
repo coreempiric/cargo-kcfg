@@ -1,5 +1,5 @@
 pub mod config {
-    cargo_kconfig_macros::include_config!();
+    cargo_kcfg_macros::include_config!();
 }
 
 use config::*;

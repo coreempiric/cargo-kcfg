@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use cargo_kconfig::{Pipeline, ProjectLocator};
+use cargo_kcfg::{Pipeline, ProjectLocator};
 use proc_macro::TokenStream;
 use quote::quote;
 use std::env;

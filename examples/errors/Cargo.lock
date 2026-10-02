@@ -68,7 +68,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
 
 [[package]]
-name = "cargo-kconfig"
+name = "cargo-kcfg"
 version = "0.0.1"
 dependencies = [
  "clap",
@@ -79,10 +79,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "cargo-kconfig-macros"
+name = "cargo-kcfg-macros"
 version = "0.0.1"
 dependencies = [
- "cargo-kconfig",
+ "cargo-kcfg",
  "proc-macro2",
  "quote",
 ]
@@ -161,7 +161,7 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 name = "kconfig-example-errors"
 version = "0.0.1"
 dependencies = [
- "cargo-kconfig-macros",
+ "cargo-kcfg-macros",
 ]
 
 [[package]]

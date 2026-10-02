@@ -1,4 +1,4 @@
-# cargo-kconfig
+# cargo-kcfg
 
 Linux/Zephyr-style **Kconfig** for Rust crates.
 
@@ -9,22 +9,22 @@ user intent.
 
 This package is the library, CLI, and optional `build.rs` helper. Firmware
 and application crates that only need constants should depend on
-[`cargo-kconfig-macros`](https://crates.io/crates/cargo-kconfig-macros) so nothing
+[`cargo-kcfg-macros`](https://crates.io/crates/cargo-kcfg-macros) so nothing
 is compiled for the target.
 
 ## Installation
 
 ```bash
-cargo install --path /local/path/to/this/repo
-cargo kconfig --help
+cargo install cargo-kcfg
+cargo kcfg --help
 ```
 
-The binary is named `cargo-kconfig`, so Cargo exposes it as a subcommand:
+The binary is named `cargo-kcfg`, so Cargo exposes it as a subcommand:
 
 ```bash
-cargo kconfig check
-cargo kconfig build
-cargo kconfig test
+cargo kcfg check
+cargo kcfg build
+cargo kcfg test
 ```
 
 Constants in your crate do **not** require the CLI. Use it to validate a tree
@@ -85,14 +85,14 @@ including `no_std` targets:
 
 ```toml
 [dependencies]
-cargo-kconfig-macros = "0.0.1"
+cargo-kcfg-macros = "0.0.1"
 ```
 
 ### 3. Include the generated constants
 
 ```rust,ignore
 pub mod config {
-    cargo_kconfig_macros::include_config!();
+    cargo_kcfg_macros::include_config!();
 }
 
 use config::*;
@@ -130,7 +130,7 @@ my-product/
   Kconfig
   configs/qemu_defconfig
   lib/
-    Cargo.toml               # cargo-kconfig-macros = "0.0.1"
+    Cargo.toml               # cargo-kcfg-macros = "0.0.1"
     src/lib.rs               # pub mod config { include_config!(); }
   app/
     Cargo.toml               # depends on lib
@@ -148,8 +148,8 @@ cargo run -p my-app
 ### 5. Check a tree from the CLI
 
 ```bash
-cargo kconfig check
-cargo kconfig build          # writes .config and config.rs next to the crate
+cargo kcfg check
+cargo kcfg build          # writes .config and config.rs next to the crate
 ```
 
 `--root` / `--kconfig` / `--defconfig` override discovery. `check` does not
@@ -163,15 +163,15 @@ The compile-time include still uses the product defconfig. Tests that need a
 
 ```toml
 [dependencies]
-cargo-kconfig-macros = "0.0.1"
+cargo-kcfg-macros = "0.0.1"
 
 [dev-dependencies]
-cargo-kconfig = "0.0.1"
+cargo-kcfg = "0.0.1"
 ```
 
 ```rust,no_run
-use cargo_kconfig::domain::{IssueKind, Value};
-use cargo_kconfig::{ConfigTest, Error};
+use cargo_kcfg::domain::{IssueKind, Value};
+use cargo_kcfg::{ConfigTest, Error};
 
 fn uart_paths() -> Result<(), Error> {
     let kconfig = ConfigTest::discover()?;
@@ -197,16 +197,16 @@ fn uart_paths() -> Result<(), Error> {
 ### Optional: `#[cfg(CONFIG_*)]`
 
 If this crate must use `#[cfg(CONFIG_FOO)]` / `cfg!(CONFIG_FOO)`, add
-`cargo-kconfig` as a **build**-dependency. That cfg is visible only inside that
+`cargo-kcfg` as a **build**-dependency. That cfg is visible only inside that
 crate.
 
 ```toml
 [build-dependencies]
-cargo-kconfig = "0.0.1"
+cargo-kcfg = "0.0.1"
 ```
 
 ```rust,no_run
-if cargo_kconfig::run_build_script().is_err() {
+if cargo_kcfg::run_build_script().is_err() {
     std::process::exit(1);
 }
 ```
@@ -217,11 +217,11 @@ Prefer `if CONFIG_FOO` and sharing `the_lib::config` unless you truly need cfg.
 
 | Surface | Responsibility |
 | --- | --- |
-| `cargo-kconfig-macros::include_config!` | Compile-time include of `CONFIG_*` constants. No `build.rs`. Host-only proc-macro. |
+| `cargo-kcfg-macros::include_config!` | Compile-time include of `CONFIG_*` constants. No `build.rs`. Host-only proc-macro. |
 | `ConfigTest` | Runtime evaluate of a chosen (including illegal) defconfig from unit tests. |
 | `Pipeline` / `ProjectLocator` | Load Kconfig + defconfig, evaluate, generate `.config` / `config.rs`. |
 | `BuildScript` / `run_build_script` | Optional `build.rs` helper: write `OUT_DIR` artefacts and emit `cargo:rustc-cfg`. |
-| `cli::Cli` | `cargo kconfig check\|build\|test`. |
+| `cli::Cli` | `cargo kcfg check\|build\|test`. |
 | `Telemetry` | Process-wide tracing on stderr; `new(prefix)` prefixes every log line. |
 | `domain` | Pure evaluation: symbols, expressions, `select`/`imply`/`choice`. No filesystem. |
 | `infra` | Files, parser adapter, codegen, discovery. Depends on `domain`, never the reverse. |
@@ -239,7 +239,7 @@ Public functions return `Result` with `Error` (or `TelemetryError` / `Validation
 | `Error::Parse` | `nom-kconfig` rejected the file, or trailing text was left unparsed. |
 | `Error::Validation` | The configuration is incoherent (unmet `depends on`, bad `select`, `choice` conflict, unknown symbol, type mismatch, out of range, cycle). |
 | `Error::Domain` | Resource limits or symbol-table rules (`Limits`) were exceeded. |
-| `Error::Usage` | Missing files, ambiguous defconfigs, missing `CARGO_MANIFEST_DIR`/`OUT_DIR`, or `rustc` failed during `cargo kconfig test`. |
+| `Error::Usage` | Missing files, ambiguous defconfigs, missing `CARGO_MANIFEST_DIR`/`OUT_DIR`, or `rustc` failed during `cargo kcfg test`. |
 | `TelemetryError::InitFailed` | `Telemetry::new` called more than once in the process. |
 
 Match on `Error::Validation` and `ValidationReport::has_kind` in tests to branch on a known-bad defconfig. The `Display` text always includes what is wrong and what to change.
@@ -247,9 +247,9 @@ Match on `Error::Validation` and `ValidationReport::has_kind` in tests to branch
 ## Commands
 
 ```bash
-cargo kconfig check
-cargo kconfig build
-cargo kconfig test
+cargo kcfg check
+cargo kcfg build
+cargo kcfg test
 ```
 
 `check` validates only. `build` writes `.config` and `config.rs`. `test`
@@ -299,12 +299,12 @@ cargo run --manifest-path examples/workspace/app/Cargo.toml
 Invalid defconfigs error out instead of generating constants. Check them with the CLI:
 
 ```bash
-cargo kconfig check --root examples/errors --defconfig depends_unmet_defconfig
-cargo kconfig check --root examples/errors --defconfig select_unmet_defconfig
-cargo kconfig check --root examples/errors --defconfig imply_unmet_defconfig
-cargo kconfig check --root examples/errors --defconfig if_unmet_defconfig
-cargo kconfig check --root examples/errors --defconfig choice_conflict_defconfig
-cargo kconfig check --root examples/errors --defconfig range_bad_defconfig
+cargo kcfg check --root examples/errors --defconfig depends_unmet_defconfig
+cargo kcfg check --root examples/errors --defconfig select_unmet_defconfig
+cargo kcfg check --root examples/errors --defconfig imply_unmet_defconfig
+cargo kcfg check --root examples/errors --defconfig if_unmet_defconfig
+cargo kcfg check --root examples/errors --defconfig choice_conflict_defconfig
+cargo kcfg check --root examples/errors --defconfig range_bad_defconfig
 ```
 
 `select` is a reverse dependency: enabling `UART_FOO` turns `HAS_UART` on

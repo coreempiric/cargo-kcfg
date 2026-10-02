@@ -1,5 +1,5 @@
 pub mod config {
-    cargo_kconfig_macros::include_config!();
+    cargo_kcfg_macros::include_config!();
 }
 
 pub fn board_name() -> &'static str {
@@ -9,8 +9,8 @@ pub fn board_name() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::config::*;
-    use cargo_kconfig::domain::{IssueKind, Value};
-    use cargo_kconfig::{ConfigTest, Error};
+    use cargo_kcfg::domain::{IssueKind, Value};
+    use cargo_kcfg::{ConfigTest, Error};
 
     #[test]
     fn generated_constants_live_in_the_config_module() {

@@ -1,4 +1,4 @@
-mainmenu "Minimal cargo-kconfig example"
+mainmenu "Minimal cargo-kcfg example"
 
 config FOO
 	bool "Enable foo feature"
