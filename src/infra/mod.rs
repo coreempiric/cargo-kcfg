@@ -9,8 +9,8 @@
 //!   → [`codegen::CodeGenerator`]
 //!   → [`pipeline::ArtifactWriter`]
 //!
-//! Constants: [`crate::include_config`] after [`build_script::run_build_script`].
-//! The same build script emits `cargo:rustc-cfg` for `#[cfg(CONFIG_*)]`.
+//! Constants: `cargo_kcfg_macros::include_config!` (no consumer `build.rs`).
+//! Optional rustc-cfg: [`build_script::BuildScript`].
 //! Unit tests that need a good or bad defconfig enter at [`config_test::ConfigTest`].
 
 pub mod build_script;

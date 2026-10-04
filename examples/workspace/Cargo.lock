@@ -69,13 +69,22 @@ checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
 
 [[package]]
 name = "cargo-kcfg"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap",
  "nom-kconfig",
  "thiserror",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "cargo-kcfg-macros"
+version = "0.0.1"
+dependencies = [
+ "cargo-kcfg",
+ "proc-macro2",
+ "quote",
 ]
 
 [[package]]
@@ -160,6 +169,7 @@ name = "kconfig-example-workspace-lib"
 version = "0.0.1"
 dependencies = [
  "cargo-kcfg",
+ "cargo-kcfg-macros",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 pub mod config {
-    cargo_kcfg::include_config!();
+    cargo_kcfg_macros::include_config!();
 }
 
 pub fn board_name() -> &'static str {

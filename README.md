@@ -7,8 +7,10 @@ Parse Kconfig definitions, load a `*_defconfig`, evaluate `depends on` /
 An illegal configuration is a hard error: the tool does not silently repair
 user intent.
 
-This package is the library, the CLI, and the `build.rs` helper. A crate that
-needs `CONFIG_*` constants depends on `cargo-kcfg` and calls `include_config!`.
+This package is the library, CLI, and optional `build.rs` helper. Firmware
+and application crates that only need constants should depend on
+[`cargo-kcfg-macros`](https://crates.io/crates/cargo-kcfg-macros) so nothing
+is compiled for the target.
 
 ## Installation
 
@@ -76,32 +78,21 @@ KCONFIG_DEFCONFIG=configs/prod_defconfig cargo build
 Keep illegal assignment files out of that search (for example
 `configs/cases/unmet_defconfig`) so a `cargo build` cannot pick them up.
 
-### 2. Depend on cargo-kcfg
+### 2. Depend on the macros crate
 
-`build.rs` runs on the host and writes `OUT_DIR/config.rs`. The normal
-dependency is only the `include_config!` macro, so a `no_std` target does not
-compile the evaluator:
+No `build.rs`. The proc-macro runs on the host while your crate compiles,
+including `no_std` targets:
 
 ```toml
 [dependencies]
-cargo-kcfg = { version = "0.0.1", default-features = false }
-
-[build-dependencies]
-cargo-kcfg = "0.0.1"
-```
-
-```rust,no_run
-// build.rs
-if cargo_kcfg::run_build_script().is_err() {
-    std::process::exit(1);
-}
+cargo-kcfg-macros = "0.0.1"
 ```
 
 ### 3. Include the generated constants
 
 ```rust,ignore
 pub mod config {
-    cargo_kcfg::include_config!();
+    cargo_kcfg_macros::include_config!();
 }
 
 use config::*;
@@ -114,10 +105,10 @@ pub fn init() {
 }
 ```
 
-`run_build_script` finds `Kconfig` next to this package, or walks up to a
+`include_config!` finds `Kconfig` next to this package, or walks up to a
 parent directory that has both `Cargo.toml` and `Kconfig`. It then evaluates
-the unique defconfig (or `KCONFIG_DEFCONFIG`) and writes `CONFIG_*` items.
-`include_config!` pastes that file into the module.
+the unique defconfig (or `KCONFIG_DEFCONFIG`) and expands `CONFIG_*` items
+into that module.
 
 Use the **constants**, not rustc cfg:
 
@@ -125,13 +116,13 @@ Use the **constants**, not rustc cfg:
 if CONFIG_FOO { /* ... */ }
 if !CONFIG_FOO { /* ... */ }
 
-// #[cfg(CONFIG_FOO)] also works: run_build_script emits cargo:rustc-cfg
+// #[cfg(CONFIG_FOO)]  // not set — a proc-macro cannot emit cargo:rustc-cfg
 ```
 
 ### 4. Workspace (several packages)
 
-Cargo never runs a `build.rs` at a virtual workspace root. Put it on the
-member that owns the constants.
+Cargo never runs a `build.rs` at a virtual workspace root. Member crates do
+not need one either.
 
 ```text
 my-product/
@@ -139,8 +130,7 @@ my-product/
   Kconfig
   configs/qemu_defconfig
   lib/
-    Cargo.toml               # cargo-kcfg = "0.0.1"
-    build.rs                 # cargo_kcfg::run_build_script()
+    Cargo.toml               # cargo-kcfg-macros = "0.0.1"
     src/lib.rs               # pub mod config { include_config!(); }
   app/
     Cargo.toml               # depends on lib
@@ -173,13 +163,10 @@ The compile-time include still uses the product defconfig. Tests that need a
 
 ```toml
 [dependencies]
-cargo-kcfg = { version = "0.0.1", default-features = false }
-
-[build-dependencies]
-cargo-kcfg = "0.0.1"
+cargo-kcfg-macros = "0.0.1"
 
 [dev-dependencies]
-cargo-kcfg = "0.0.1"
+cargo-kcfg = "0.0.2"
 ```
 
 ```rust,no_run
@@ -209,19 +196,31 @@ fn uart_paths() -> Result<(), Error> {
 
 ### Optional: `#[cfg(CONFIG_*)]`
 
-The same `build.rs` prints `cargo:rustc-cfg` for enabled bool and tristate
-symbols. `#[cfg(CONFIG_FOO)]` / `cfg!(CONFIG_FOO)` are visible only inside the
-crate that runs the build script. Prefer `if CONFIG_FOO` and sharing
-`the_lib::config` unless you truly need cfg.
+If this crate must use `#[cfg(CONFIG_FOO)]` / `cfg!(CONFIG_FOO)`, add
+`cargo-kcfg` as a **build**-dependency. That cfg is visible only inside that
+crate.
+
+```toml
+[build-dependencies]
+cargo-kcfg = "0.0.2"
+```
+
+```rust,no_run
+if cargo_kcfg::run_build_script().is_err() {
+    std::process::exit(1);
+}
+```
+
+Prefer `if CONFIG_FOO` and sharing `the_lib::config` unless you truly need cfg.
 
 ## Crate map
 
 | Surface | Responsibility |
 | --- | --- |
-| `include_config!` | Pastes `OUT_DIR/config.rs` into the calling module. |
+| `cargo-kcfg-macros::include_config!` | Compile-time include of `CONFIG_*` constants. No `build.rs`. Host-only proc-macro. |
 | `ConfigTest` | Runtime evaluate of a chosen (including illegal) defconfig from unit tests. |
 | `Pipeline` / `ProjectLocator` | Load Kconfig + defconfig, evaluate, generate `.config` / `config.rs`. |
-| `BuildScript` / `run_build_script` | `build.rs` helper: write `OUT_DIR` artefacts and emit `cargo:rustc-cfg`. |
+| `BuildScript` / `run_build_script` | Optional `build.rs` helper: write `OUT_DIR` artefacts and emit `cargo:rustc-cfg`. |
 | `cli::Cli` | `cargo kcfg check\|build\|test`. |
 | `Telemetry` | Process-wide tracing on stderr; `new(prefix)` prefixes every log line. |
 | `domain` | Pure evaluation: symbols, expressions, `select`/`imply`/`choice`. No filesystem. |
@@ -274,7 +273,7 @@ additionally type-checks the generated constants with `rustc`.
 | `examples/select` | `select` auto-enables helpers; enabling a target whose `depends on` is unmet is an error. `imply` is a weak default. Switch with `KCONFIG_DEFCONFIG=dma_defconfig` or `imply_defconfig` |
 | `examples/choice` | Bool `choice` exclusivity. Switch with `KCONFIG_DEFCONFIG=rtt_defconfig` |
 | `examples/errors` | Each keyword that must **fail**: `depends on`, `select`, `imply` (user `y`), `if`, `choice`, `range`. Valid defaults: `ok_defconfig` and `imply_respected_defconfig` |
-| `examples/workspace` | Virtual workspace: root `Kconfig` + `configs/qemu_defconfig`, member `lib` with `build.rs` and `include_config!`, member `app` that `use`s `lib::config`. Unit tests feed a bad defconfig through `ConfigTest` |
+| `examples/workspace` | Virtual workspace: root `Kconfig` + `configs/qemu_defconfig`, member `lib` with `include_config!` (no `build.rs`), member `app` that `use`s `lib::config`. Unit tests feed a bad defconfig through `ConfigTest` |
 
 ```bash
 KCONFIG_DEFCONFIG=bus_defconfig cargo run --manifest-path examples/depends/Cargo.toml

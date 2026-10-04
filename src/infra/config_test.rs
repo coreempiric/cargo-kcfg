@@ -1,7 +1,7 @@
 //! Evaluate known-good or known-bad assignment files from unit tests.
 //!
 //! Compile-time constants come from
-//! `pub mod config { cargo_kcfg::include_config!(); }`.
+//! `pub mod config { cargo_kcfg_macros::include_config!(); }`.
 //! Tests that need to **branch** on a configuration call [`ConfigTest`]:
 //!
 //! ```rust,no_run
